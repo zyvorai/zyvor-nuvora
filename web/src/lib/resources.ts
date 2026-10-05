@@ -13,7 +13,7 @@ export const FIELDS: Record<string, string[]> = {
   policies: ['max_chars', 'daily_tokens', 'blocked_topics', 'redact_pii', 'detect_injection', 'word_filters', 'regex_filters', 'pii_entities', 'grounding_threshold', 'classifier_model', 'classifier_categories', 'classifier_threshold', 'cache_ttl'],
   workflows: ['steps'],
   evaluations: ['model', 'cases', 'pass_threshold', 'judge_model', 'knowledge_ids'],
-  recipes: ['model', 'method', 'dataset', 'rank', 'epochs'],
+  recipes: ['model', 'method', 'dataset', 'dataset_id', 'teacher_model', 'rank', 'epochs'],
   actions: ['url', 'method', 'key_env', 'description', 'input_schema'],
 };
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import { useState } from 'react';
-import { Cpu, FlaskConical, Plug, RefreshCw, Route, Server } from 'lucide-react';
+import { Cpu, Database, FlaskConical, Plug, RefreshCw, Route, Server, Trash2 } from 'lucide-react';
 import { Card, Field } from '../components/kit';
 import { api, download, money, type Row } from '../api';
 import ResourceTable from '../components/ResourceTable';
@@ -160,10 +160,108 @@ export function McpServers({ rows }: { rows: Row[] }) {
   );
 }
 
-export function Recipes({ rows, act }: { rows: Row[]; act: Act }) {
+function fileText(file: File): Promise<string> {
+  return file.text();
+}
+
+function Datasets({ rows, act, canWrite, isAdmin }: { rows: Row[]; act: Act; canWrite: boolean; isAdmin: boolean }) {
+  const [name, setName] = useState('');
+  const [content, setContent] = useState('');
+  const [check, setCheck] = useState<Row | null>(null);
+  async function validate(dryRun: boolean) {
+    const r = await act(() => api('/api/datasets', { name: name || 'Dataset', content, dry_run: dryRun }), dryRun ? undefined : 'Dataset saved');
+    if (r && dryRun) setCheck(r);
+    if (r && !dryRun) {
+      setCheck(null);
+      setContent('');
+      setName('');
+    }
+  }
+  return (
+    <Card title="Training datasets" eyebrow="JSONL">
+      {rows.length > 0 && (
+        <ul className="doc-list">
+          {rows.map((d) => (
+            <li key={d.id}>
+              <Database size={16} />
+              <div>
+                <b>{d.name}</b>
+                <small>
+                  <span className="type-badge">{d.format}</span> {d.records} records · ~{Number(d.estimated_tokens).toLocaleString()} tokens
+                  {d.pii_redacted_records ? ` · PII redacted in ${d.pii_redacted_records}` : ''} · <code>{String(d.digest).slice(0, 10)}</code>
+                </small>
+              </div>
+              {isAdmin && (
+                <button type="button" className="icon" aria-label={'Delete ' + d.name} onClick={() => act(() => api('/api/datasets/' + d.id, undefined, 'DELETE'), `Deleted ${d.name}`)}>
+                  <Trash2 size={15} />
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {canWrite && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            validate(true);
+          }}
+        >
+          <div className="form-grid">
+            <Field label="Dataset name">
+              <input value={name} onChange={(e) => setName(e.target.value)} required />
+            </Field>
+            <Field label="JSONL file">
+              <input
+                type="file"
+                accept=".jsonl,.json,.txt"
+                onChange={async (e) => {
+                  const f = e.target.files?.[0];
+                  if (f) {
+                    setContent(await fileText(f));
+                    if (!name) setName(f.name.replace(/\.[^.]+$/, ''));
+                    setCheck(null);
+                  }
+                }}
+              />
+            </Field>
+          </div>
+          <Field label='Or paste records · {"messages": [...]}, {"prompt", "completion"} or {"prompt"} per line'>
+            <textarea
+              className="code-input"
+              rows={4}
+              value={content}
+              onChange={(e) => {
+                setContent(e.target.value);
+                setCheck(null);
+              }}
+            />
+          </Field>
+          {check && (
+            <p className="guard-verdict" role="status">
+              Valid {check.format} dataset · {check.records} records · ~{Number(check.estimated_tokens).toLocaleString()} tokens
+              {check.pii_redacted_records ? ` · PII will be redacted in ${check.pii_redacted_records} records` : ''}
+            </p>
+          )}
+          <div className="actions">
+            <button type="submit" className="btn-secondary" disabled={!content.trim()}>
+              Validate
+            </button>
+            <button type="button" className="primary" disabled={!check} onClick={() => validate(false)}>
+              Save dataset
+            </button>
+          </div>
+        </form>
+      )}
+    </Card>
+  );
+}
+
+export function Recipes({ rows, act, datasets = [], isAdmin = false, canWrite = false, onQueued }: { rows: Row[]; act: Act; datasets?: Row[]; isAdmin?: boolean; canWrite?: boolean; onQueued?: () => void }) {
+  const trainable = (r: Row) => ['lora', 'qlora', 'distillation'].includes(r.method) && r.dataset_id;
   return (
     <div className="stack-page">
-      <p className="note">Recipes export configuration for an external trainer. Nuvora does not execute GPU training, distillation, or quantization in this release.</p>
+      <p className="note">LoRA, QLoRA and distillation recipes with a dataset train on the operator’s trainer (NUVORA_TRAINER_URL) and the result joins the model catalog. Every recipe can also be exported for your own trainer.</p>
       <ResourceTable
         rows={rows}
         columns={['name', 'method', 'model', 'status']}
@@ -171,15 +269,33 @@ export function Recipes({ rows, act }: { rows: Row[]; act: Act }) {
         emptyTitle="No recipes yet"
         emptyText="Describe a LoRA, QLoRA, distillation or quantization run and export it for your external trainer."
         renderAction={(r) => (
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => act(() => api('/api/recipes/' + r.id + '/export', {})).then((v) => v && download('nuvora-recipe.json', v))}
-          >
-            Export recipe
-          </button>
+          <span className="answer-actions">
+            {isAdmin && trainable(r) && (
+              <button
+                type="button"
+                className="primary compact"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  if (await act(() => api('/api/recipes/' + r.id + '/run', {}), 'Training queued · see Runs')) onQueued?.();
+                }}
+              >
+                Train
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn-secondary compact"
+              onClick={(e) => {
+                e.stopPropagation();
+                act(() => api('/api/recipes/' + r.id + '/export', {})).then((v) => v && download('nuvora-recipe.json', v));
+              }}
+            >
+              Export
+            </button>
+          </span>
         )}
       />
+      <Datasets rows={datasets} act={act} canWrite={canWrite} isAdmin={isAdmin} />
     </div>
   );
 }

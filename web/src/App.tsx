@@ -48,7 +48,7 @@ const pageHero: Partial<Record<Page, { title: string; lede: string; tint?: HeroT
   mcp_servers: { title: 'Bring your tools. Keep the brakes.', lede: 'Connect Model Context Protocol servers over HTTP. Read-only servers run directly; every call to a writing server waits for a different person to approve it.', tint: 'purple' },
   workflows: { title: 'From a question to an approved outcome.', lede: 'Pinned DAG revisions with retrieval, generation, extraction and human review steps, checkpointed between nodes.', tint: 'purple' },
   prompts: { title: 'Version the instructions that matter.', lede: 'Templates with declared variables, optimistic revision edits and retained snapshots.' },
-  recipes: { title: 'Prepare your next model.', lede: 'Export LoRA, QLoRA, distillation and quantization recipes for an external trainer. No GPU job runs here.', tint: 'amber' },
+  recipes: { title: 'Prepare your next model.', lede: 'Validate a JSONL dataset, then train a LoRA, QLoRA or distilled model on your trainer. The finished model joins the catalog; any recipe can also be exported.', tint: 'amber' },
   jobs: { title: 'Every step, in view.', lede: 'Agent, workflow, evaluation and batch runs with their tool traces, checkpoints and exportable evidence.', tint: 'green' },
   evaluations: { title: 'Measure before you promote.', lede: 'Phrase assertions, LLM-judge criteria and groundedness checks with pass thresholds and release verdicts, comparable across revisions.', tint: 'green' },
   batches: { title: 'Run many prompts as one.', lede: 'Queue up to 100 prompts as one durable run. Each item records its own success or failure.' },
@@ -61,7 +61,7 @@ const pageHero: Partial<Record<Page, { title: string; lede: string; tint?: HeroT
   users: { title: 'The right access. The right workspace.', lede: 'Viewers read, developers propose, approvers decide, administrators manage. Every workspace is isolated.' },
 };
 
-const COLLECTIONS = ['models', 'routers', 'knowledge', 'connectors', 'agents', 'actions', 'mcp_servers', 'workflows', 'prompts', 'policies', 'evaluations', 'recipes', 'jobs', 'approvals'];
+const COLLECTIONS = ['models', 'routers', 'knowledge', 'connectors', 'datasets', 'agents', 'actions', 'mcp_servers', 'workflows', 'prompts', 'policies', 'evaluations', 'recipes', 'jobs', 'approvals'];
 const CREATABLE: Page[] = ['models', 'routers', 'agents', 'actions', 'mcp_servers', 'knowledge', 'connectors', 'workflows', 'prompts', 'policies', 'evaluations', 'recipes'];
 const ADMIN_ONLY: Page[] = ['models', 'policies', 'actions', 'mcp_servers', 'connectors'];
 
@@ -283,7 +283,7 @@ function Console() {
     connectors: <Connectors rows={rows} knowledge={collections.knowledge || []} act={act} isAdmin={principal.role === 'admin'} onQueued={() => navigate('jobs')} />,
     workflows: <Workflows rows={rows} />,
     prompts: <Prompts rows={rows} canWrite={canWrite} act={act} selected={prompt} onSelect={setPrompt} onEdit={() => prompt && setEditor({ kind: 'prompts', existing: prompt })} evaluations={collections.evaluations || []} onQueued={() => navigate('jobs')} />,
-    recipes: <Recipes rows={rows} act={act} />,
+    recipes: <Recipes rows={rows} act={act} datasets={collections.datasets || []} isAdmin={principal.role === 'admin'} canWrite={canWrite} onQueued={() => navigate('jobs')} />,
     jobs: (
       <Runs
         key={page === 'jobs' ? focus : undefined}

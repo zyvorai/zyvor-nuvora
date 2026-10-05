@@ -21,7 +21,7 @@ const KEYS: Record<string, string[]> = {
   connectors: ['type', 'knowledge_id', 'url', 'depth', 'max_pages', 'bucket', 'prefix', 'region', 'space', 'username', 'key_env', 'metadata', 'groups', 'interval_minutes'],
   prompts: ['template', 'variants'],
   policies: ['redact_pii', 'detect_injection', 'max_chars', 'daily_tokens', 'blocked_topics', 'word_filters', 'regex_filters', 'pii_entities', 'grounding_threshold', 'classifier_model', 'classifier_categories', 'classifier_threshold', 'cache_ttl'],
-  recipes: ['model', 'method', 'dataset', 'rank', 'epochs'],
+  recipes: ['model', 'method', 'dataset', 'dataset_id', 'teacher_model', 'rank', 'epochs'],
   evaluations: ['model', 'pass_threshold', 'judge_model', 'knowledge_ids'],
   workflows: [],
 };
@@ -617,8 +617,42 @@ export default function CreateForm({
               ))}
             </select>
           </Field>
-          {field('dataset', 'External trainer dataset path')}
-          <p className="note">Configuration export only. No GPU job is executed.</p>
+          <Field label="Training dataset">
+            <select value={data.dataset_id || ''} onChange={(e) => set('dataset_id', e.target.value || undefined)}>
+              <option value="">None · export only</option>
+              {(collections.datasets || []).map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name} · {d.records} {d.format} records
+                </option>
+              ))}
+            </select>
+          </Field>
+          {data.method === 'distillation' && (
+            <Field label="Teacher model (answers each prompt)">
+              <select value={data.teacher_model || ''} onChange={(e) => set('teacher_model', e.target.value)} required>
+                <option value="">Choose…</option>
+                {chatModels
+                  .filter((m) => m.id !== data.model)
+                  .map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+              </select>
+            </Field>
+          )}
+          <div className="form-grid">
+            <Field label="LoRA rank">
+              <input type="number" min={1} max={256} value={data.rank ?? 16} onChange={(e) => set('rank', Number(e.target.value))} />
+            </Field>
+            <Field label="Epochs">
+              <input type="number" min={1} max={50} value={data.epochs ?? 3} onChange={(e) => set('epochs', Number(e.target.value))} />
+            </Field>
+          </div>
+          <Field label="Dataset path for an external trainer (optional)">
+            <input value={data.dataset || ''} onChange={(e) => set('dataset', e.target.value)} />
+          </Field>
+          <p className="note">With a dataset and a configured trainer, LoRA, QLoRA and distillation recipes train from Nuvora and register the result as a model. Evaluation and quantization recipes are export only.</p>
         </>
       )}
       {(kind === 'workflows' || kind === 'evaluations') && (

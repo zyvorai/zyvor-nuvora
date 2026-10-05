@@ -159,6 +159,25 @@ function Inspector({ run, approvals, principal, canApprove, act }: { run: Row; a
         </div>
       )}
 
+      {run.type === 'training' && (
+        <div className="verdict">
+          <b className={run.status === 'completed' ? 'green' : run.status === 'failed' ? 'red' : ''}>
+            {run.status === 'completed' ? 'Model registered' : run.status === 'failed' ? 'Training failed' : 'Training on the external trainer'}
+          </b>
+          <span>
+            {[
+              run.checkpoint?.training?.trainer_job && `trainer job ${run.checkpoint.training.trainer_job}`,
+              run.checkpoint?.training?.remote_status,
+              typeof run.checkpoint?.training?.progress === 'number' && `${Math.round(run.checkpoint.training.progress * 100)}%`,
+              run.result?.records && `${run.result.records} records`,
+              run.result?.model && `model ${run.result.model}`,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </span>
+        </div>
+      )}
+
       {run.type === 'extract' && run.result?.fields && (
         <div className="table-wrap">
           <table aria-label="Extracted fields">

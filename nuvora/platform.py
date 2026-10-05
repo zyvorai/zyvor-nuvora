@@ -13,11 +13,11 @@ from .store import canonical
 from .security import CLASSIFIER_CATEGORIES, Fault, guard, require, validate_policy
 from .providers import DATA_IMAGE, Providers, text_of
 from .retrieval import chunks, search
-from . import actions, connectors, mcp_client, telemetry
+from . import actions, connectors, datasets, mcp_client, telemetry
 from . import ingest as parsers
 from .integrations import Integrations, TOOLS as INTEGRATION_TOOLS
 
-KINDS=('actions','models','knowledge','documents','agents','prompts','policies','workflows','evaluations','recipes','routers','mcp_servers','connectors','memory','jobs','approvals')
+KINDS=('actions','models','knowledge','documents','agents','prompts','policies','workflows','evaluations','recipes','routers','mcp_servers','connectors','datasets','memory','jobs','approvals')
 WRITABLE=('actions','models','knowledge','agents','prompts','policies','workflows','evaluations','recipes','routers','mcp_servers','connectors')
 ADMIN_KINDS=('models','policies','actions','mcp_servers','connectors')
 META_KEY=re.compile(r'[a-z][a-z0-9_]{0,39}')
@@ -106,12 +106,14 @@ class Platform:
         item=self.store.get(p['tenant'],kind,id)
         if kind=='documents' and not visible(p,item):
             raise KeyError(id)
-        return item
+        return {k:v for k,v in item.items() if k!='content'} if kind=='datasets' else item
 
     def list(self,p,kind):
         if kind not in KINDS:
             raise Fault('Unknown collection',404)
         items=self.store.list(p['tenant'],kind)
+        if kind=='datasets':
+            return [{k:v for k,v in d.items() if k!='content'} for d in items]
         return [d for d in items if visible(p,d)] if kind=='documents' else items
 
     def create(self,p,kind,data,id=None):
@@ -145,7 +147,7 @@ class Platform:
             'routers':{'models','strategy','judge_model','min_score'},
             'workflows':{'steps'},
             'evaluations':{'model','cases','pass_threshold','judge_model','knowledge_ids'},
-            'recipes':{'model','method','dataset','rank','epochs','status'},
+            'recipes':{'model','method','dataset','dataset_id','teacher_model','rank','epochs','status'},
             'actions':{'url','method','key_env','description','input_schema','requires_approval'},
         }
         if set(data)-fields[kind]-{'name','expected_revision'}:
@@ -338,8 +340,50 @@ class Platform:
             self.get(p,'models',data['model'])
             if data.get('method') not in ('lora','qlora','distillation','evaluation','quantization'):
                 raise Fault('Unknown recipe method')
-            data['status']='exportable recipe; no training executed'
+            for key,low,high in (('rank',1,256),('epochs',1,50)):
+                if key in data and (not isinstance(data[key],int) or not low<=data[key]<=high):
+                    raise Fault(f'{key} must be an integer between {low} and {high}')
+            if data.get('dataset_id'):
+                dataset=self.get(p,'datasets',data['dataset_id'])
+                if dataset['format']=='prompts' and data['method']!='distillation':
+                    raise Fault('A prompts-only dataset can only feed a distillation recipe')
+            if data['method']=='distillation':
+                if not data.get('teacher_model'):
+                    raise Fault('Distillation needs a teacher model')
+                teacher=self.get(p,'models',data['teacher_model'])
+                if teacher.get('capability','chat')!='chat' or teacher['id']==data['model']:
+                    raise Fault('Distillation needs a different chat model as the teacher')
+            else:
+                data.pop('teacher_model',None)
+            data['status']='ready to train' if data.get('dataset_id') and data['method'] in self.TRAINABLE else 'exportable recipe'
         return data
+
+    TRAINABLE=('lora','qlora','distillation')
+    DISTILL_LIMIT=500
+
+    def create_dataset(self,p,body):
+        require(p,'developer','admin')
+        name=body.get('name')
+        if not isinstance(name,str) or not 1<=len(name)<=120:
+            raise Fault('A dataset name of 1–120 characters is required')
+        text=body.get('content')
+        if text is None and body.get('content_base64') is not None:
+            import base64,binascii
+            try:
+                text=base64.b64decode(body['content_base64'],validate=True).decode('utf-8')
+            except (binascii.Error,ValueError,UnicodeDecodeError) as exc:
+                raise Fault('content_base64 must be base64-encoded UTF-8 JSONL') from exc
+        stats,content=datasets.validate(text,self.policy(p))
+        if body.get('dry_run'):
+            return {**stats,'name':name,'stored':False}
+        return self._store_dataset(p,name,stats,content,'upload')
+
+    def _store_dataset(self,p,name,stats,content,source):
+        digest=hashlib.sha256(content.encode()).hexdigest()
+        with self.store.transaction():
+            item=self.store.put(p['tenant'],'datasets',{'name':name,**stats,'digest':digest,'source':source,'content':content,'owner':p['username']})
+            self.store.audit(p['tenant'],p['username'],'dataset.created',item['id'],{'records':stats['records'],'digest':digest})
+        return {k:v for k,v in item.items() if k!='content'}
 
     def validate_connector(self,p,data):
         from .security import clean_groups, validate_url
@@ -380,11 +424,13 @@ class Platform:
 
     def delete(self,p,kind,id):
         require(p,'admin')
-        if kind not in WRITABLE:
+        if kind not in WRITABLE+('datasets',):
             raise Fault('Collection cannot be deleted directly')
+        if kind=='datasets' and any(r.get('dataset_id')==id for r in self.list(p,'recipes')):
+            raise Fault('Dataset is used by a recipe',409)
         self.get(p,kind,id)
         if kind=='models':
-            if any(id in (x.get('model'),x.get('embedding_model'),x.get('rerank_model'),x.get('ocr_model'),x.get('transcription_model')) for k in ('agents','knowledge','evaluations','recipes') for x in self.list(p,k)) \
+            if any(id in (x.get('model'),x.get('embedding_model'),x.get('rerank_model'),x.get('ocr_model'),x.get('transcription_model'),x.get('teacher_model')) for k in ('agents','knowledge','evaluations','recipes') for x in self.list(p,k)) \
                     or any(id in r.get('models',[]) or r.get('judge_model')==id for r in self.list(p,'routers')) \
                     or any(x.get('classifier_model')==id for x in self.list(p,'policies')):
                 raise Fault('Model is referenced by another resource',409)
@@ -1014,11 +1060,17 @@ class Platform:
 
     def new_job(self,p,kind,target,body,idempotency=None):
         require(p,'developer','admin')
-        if kind not in ('agent','workflow','evaluation','batch','experiment','extract','sync'):
+        if kind not in ('agent','workflow','evaluation','batch','experiment','extract','sync','training'):
             raise Fault('Unknown job type')
-        collection={'agent':'agents','workflow':'workflows','evaluation':'evaluations','experiment':'prompts','sync':'connectors'}.get(kind)
-        if kind=='sync':
+        collection={'agent':'agents','workflow':'workflows','evaluation':'evaluations','experiment':'prompts','sync':'connectors','training':'recipes'}.get(kind)
+        if kind in ('sync','training'):
             require(p,'admin')
+        if kind=='training':
+            recipe=self.get(p,'recipes',target)
+            if recipe['method'] not in self.TRAINABLE or not recipe.get('dataset_id'):
+                raise Fault('Only LoRA, QLoRA and distillation recipes with an uploaded dataset can train')
+            if not self.integrations.configured('trainer'):
+                raise Fault('No trainer is configured; set NUVORA_TRAINER_URL or export the recipe',503)
         spec=self.get(p,collection,target) if collection else None
         if kind=='experiment':
             if not spec.get('variants'):
@@ -1368,6 +1420,112 @@ class Platform:
             self.store.audit(p['tenant'],p['username'],'connector.synced',spec['id'],counts)
         return result
 
+    def recipe_status(self,p,recipe_id,status,**extra):
+        with self.store.transaction():
+            current=self.store.get(p['tenant'],'recipes',recipe_id)
+            current.update(status=status,**extra)
+            self.store.put(p['tenant'],'recipes',{k:v for k,v in current.items() if k not in ('id','created','updated','revision','tenant')},recipe_id)
+
+    def distill(self,p,job,recipe,dataset):
+        """Answer each prompt with the teacher model and return a chat dataset."""
+        records,failed=[],0
+        for messages in datasets.prompts(dataset['content'],dataset['format'])[:self.DISTILL_LIMIT]:
+            try:
+                answer=self.chat(p,{'model':recipe['teacher_model'],'messages':messages,'temperature':0.2,'max_tokens':1024})['content'].strip()
+            except Fault:
+                answer=''
+            if answer:
+                records.append(json.dumps({'messages':messages+[{'role':'assistant','content':answer}]},ensure_ascii=False))
+            else:
+                failed+=1
+        job['trace'].append({'type':'distillation','teacher':recipe['teacher_model'],'generated':len(records),'failed':failed})
+        stats,content=datasets.validate('\n'.join(records),self.policy(p))
+        return self._store_dataset(p,(dataset['name']+' · distilled')[:120],stats,content,'distillation of '+dataset['id']),content
+
+    def run_training(self,p,job):
+        recipe=self.get(p,'recipes',job['target'])
+        cp=job['checkpoint']
+        state=cp.get('training') or {}
+        if state.get('outcome'):
+            return self.register_trained(p,job,recipe,state)
+        base=self.get(p,'models',recipe['model'])
+        dataset=self.store.get(p['tenant'],'datasets',recipe['dataset_id'])
+        content,used=dataset['content'],{k:v for k,v in dataset.items() if k!='content'}
+        if recipe['method']=='distillation':
+            self.recipe_status(p,recipe['id'],'distilling with the teacher model')
+            used,content=self.distill(p,job,recipe,dataset)
+        body={'base_model':base['upstream_model'],'method':'qlora' if recipe['method']=='qlora' else 'lora',
+              'hyperparameters':{'rank':recipe.get('rank',16),'epochs':recipe.get('epochs',3)},
+              'dataset':{'format':used['format'],'records':used['records'],'digest':used['digest'],'content':content},
+              'suffix':re.sub(r'[^a-z0-9-]+','-',recipe['name'].lower()).strip('-')[:40] or 'nuvora',
+              'metadata':{'tenant':p['tenant'],'recipe':recipe['id'],'job':job['id'],'distilled_from':recipe.get('teacher_model')}}
+        try:
+            tid=self.integrations.submit_training(body)
+        except Fault as exc:
+            self.recipe_status(p,recipe['id'],'training failed: '+str(exc)[:200],last_job=job['id'])
+            raise
+        cp['training']={'trainer_job':tid,'submitted':time.time(),'deadline':time.time()+7*86400,'dataset':used['id']}
+        job['status']='waiting_external'
+        self.recipe_status(p,recipe['id'],'training (trainer job '+tid+')',last_job=job['id'])
+        self.store.audit(p['tenant'],p['username'],'training.submitted',job['id'],{'trainer_job':tid,'records':used['records']})
+        return {'trainer_job':tid,'status':'submitted','dataset':used['id'],'records':used['records']}
+
+    def register_trained(self,p,job,recipe,state):
+        outcome=state['outcome']
+        base=self.get(p,'models',recipe['model'])
+        serving=outcome.get('base_url') or os.getenv('NUVORA_TRAINER_SERVING_URL','')
+        if not isinstance(outcome.get('model'),str) or not serving:
+            raise Fault('Trainer finished without a model identifier or serving URL (set NUVORA_TRAINER_SERVING_URL)',502)
+        spec={'name':(recipe['name']+' · tuned')[:120],'provider':'openai','base_url':serving,'upstream_model':outcome['model'][:200],
+              'capability':'chat','input_price':base.get('input_price',0),'output_price':base.get('output_price',0),'enabled':True}
+        if os.getenv('NUVORA_TRAINER_SERVING_KEY_ENV'):
+            spec['key_env']=os.getenv('NUVORA_TRAINER_SERVING_KEY_ENV')
+        model=self.create(p,'models',spec)
+        self.recipe_status(p,recipe['id'],'trained → '+model['name'],trained_model=model['id'],last_job=job['id'])
+        return {'trainer_job':state['trainer_job'],'model':model['id'],'upstream_model':spec['upstream_model'],'dataset':state.get('dataset'),
+                'metrics':outcome.get('metrics') if isinstance(outcome.get('metrics'),dict) else None}
+
+    TRAINING_DONE=('succeeded','completed','success')
+    TRAINING_FAILED=('failed','error','cancelled','canceled')
+
+    def poll_training(self):
+        """Advance jobs waiting on the external trainer."""
+        with self.store.lock:
+            rows=self.store.db.execute("SELECT tenant,id,data FROM objects WHERE kind='jobs' AND data LIKE ?",('%"status":"waiting_external"%',)).fetchall()
+        for row in rows:
+            state=json.loads(row['data']).get('checkpoint',{}).get('training') or {}
+            if not state.get('trainer_job') or state.get('outcome'):
+                continue
+            try:
+                remote,error=self.integrations.training_job(state['trainer_job']),None
+            except Fault as exc:
+                remote,error={},str(exc)
+            status=str(remote.get('status','')).lower()
+            with self.store.transaction():
+                job=self.store.get(row['tenant'],'jobs',row['id'])
+                cp=job['checkpoint'].get('training') or {}
+                if job['status']!='waiting_external' or cp.get('trainer_job')!=state['trainer_job']:
+                    continue
+                p={**job['principal']}
+                if status in self.TRAINING_DONE:
+                    cp['outcome']={'model':(remote.get('result') or {}).get('model') or remote.get('fine_tuned_model'),'base_url':(remote.get('result') or {}).get('base_url'),
+                                   'metrics':(remote.get('result') or {}).get('metrics')}
+                    job['status']='queued'
+                elif status in self.TRAINING_FAILED:
+                    job.update(status='failed',error='Trainer job '+status+(': '+str(remote.get('error'))[:300] if remote.get('error') else ''),finished=time.time())
+                elif time.time()>cp.get('deadline',float('inf')):
+                    job.update(status='failed',error='Training timed out after 7 days',finished=time.time())
+                else:
+                    cp.update(last_checked=time.time(),remote_status=status or 'unknown',**({'progress':remote['progress']} if isinstance(remote.get('progress'),(int,float)) else {}))
+                    if error:
+                        cp['last_error']=error
+                    self.store.put(row['tenant'],'jobs',job,row['id'])
+                    continue
+                self.store.put(row['tenant'],'jobs',job,row['id'])
+                self.store.audit(row['tenant'],'trainer','training.'+(status or 'timeout'),row['id'],{'trainer_job':state['trainer_job']})
+            if job['status']=='failed':
+                self.recipe_status(p,job['target'],'training failed',last_job=job['id'])
+
     def schedule_connectors(self):
         """Queue a sync for each connector whose interval has elapsed and has no sync already queued or running."""
         now=time.time()
@@ -1550,6 +1708,8 @@ class Platform:
                     result=self.run_extraction(p,job)
                 elif job['type']=='sync':
                     result=self.run_sync(p,job)
+                elif job['type']=='training':
+                    result=self.run_training(p,job)
                 else:
                     results=[]
                     for request in job['input']['requests']:
@@ -1641,12 +1801,14 @@ class Platform:
                     self.recover(self.store.heartbeat(self.instance,self.WORKER_TTL))
                 except Exception:
                     traceback.print_exc()
-            if time.monotonic()-polled>5 and self.integrations.configured('zyntra'):
+            if time.monotonic()-polled>5:
                 polled=time.monotonic()
-                try:
-                    self.poll_external()
-                except Exception:
-                    traceback.print_exc()
+                for system,poll in (('zyntra',self.poll_external),('trainer',self.poll_training)):
+                    if self.integrations.configured(system):
+                        try:
+                            poll()
+                        except Exception:
+                            traceback.print_exc()
             if time.monotonic()-scheduled>60:
                 scheduled=time.monotonic()
                 try:

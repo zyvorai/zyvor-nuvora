@@ -209,7 +209,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if method!='GET':
                 self.check_origin()
-            upload=method=='POST' and (path.startswith('/api/knowledge/') and path.endswith('/upload') or path in ('/api/chat','/api/chat/stream','/v1/chat/completions','/api/extract'))
+            upload=method=='POST' and (path.startswith('/api/knowledge/') and path.endswith('/upload') or path in ('/api/chat','/api/chat/stream','/v1/chat/completions','/api/extract','/api/datasets'))
             body=self.body(UPLOAD_BODY if upload else 1024*1024) if method=='POST' else {}
             if path=='/api/auth/providers':
                 provider=app.auth.oidc
@@ -278,6 +278,9 @@ class Handler(BaseHTTPRequestHandler):
                 app.auth.change_password(p,body.get('current',''),body.get('new',''),token)
                 self.respond(200,{'ok':True})
                 return
+            if path=='/api/datasets' and method=='POST':
+                result=app.create_dataset(p,body)
+                self.respond(200 if body.get('dry_run') else 201,result); return
             if path=='/api/extract' and method=='POST':
                 self.respond(202,app.new_job(p,'extract',None,body,self.headers.get('Idempotency-Key'))); return
             if path=='/api/chat/stream' and method=='POST':
@@ -422,9 +425,11 @@ class Handler(BaseHTTPRequestHandler):
                         self.respond(202,app.new_job(p,'sync',id,body,self.headers.get('Idempotency-Key'))); return
                     if kind=='prompts' and action=='experiment':
                         self.respond(202,app.new_job(p,'experiment',id,body,self.headers.get('Idempotency-Key'))); return
+                    if kind=='recipes' and action=='run':
+                        self.respond(202,app.new_job(p,'training',id,body,self.headers.get('Idempotency-Key'))); return
                     if kind=='recipes' and action=='export':
                         recipe=app.get(p,kind,id)
-                        self.respond(200,{'apiVersion':'nuvora.zyvor.dev/v1alpha1','kind':'TrainingRecipe','metadata':{'name':recipe['name']},'spec':recipe,'execution':'External trainer required; recipe export does not train a model'}); return
+                        self.respond(200,{'apiVersion':'nuvora.zyvor.dev/v1alpha1','kind':'TrainingRecipe','metadata':{'name':recipe['name']},'spec':recipe,'execution':'Run it from Nuvora when NUVORA_TRAINER_URL is configured, or hand this export to your own trainer'}); return
                 if len(parts)>3:
                     raise Fault('Not found',404)
                 if method=='GET':

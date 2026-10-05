@@ -17,6 +17,7 @@ SYSTEMS = {
     'netra': {'label': 'Netra', 'role': 'Network evidence: incidents, flows, drop explanations (read-only)', 'health': '/api/v1/status'},
     'zyntra': {'label': 'Zyntra', 'role': 'Ontology decisions: workflow handoffs approved inside Zyntra', 'health': '/api/v1/proposals?limit=1'},
     'keep': {'label': 'Keep', 'role': 'FluxVM sandboxes for agent code execution (always approved first)', 'health': '/v1/sandboxes'},
+    'trainer': {'label': 'Trainer', 'role': 'Fine-tuning and distillation jobs (for example Gryvia); finished models join the catalog', 'health': '/v1/training/jobs?limit=1'},
 }
 
 MODEL_PRESETS = [
@@ -160,6 +161,15 @@ class Integrations:
 
     def proposal(self, pid):
         return self.request('zyntra', 'GET', '/api/v1/proposals/'+urllib.parse.quote(pid))
+
+    def submit_training(self, body):
+        job = self.request('trainer', 'POST', '/v1/training/jobs', body)
+        if not isinstance(job.get('id'), (str, int)):
+            raise Fault('Trainer returned no job id', 502)
+        return str(job['id'])
+
+    def training_job(self, tid):
+        return self.request('trainer', 'GET', '/v1/training/jobs/'+urllib.parse.quote(tid))
 
 
 def discover(model, hosts, env=None):

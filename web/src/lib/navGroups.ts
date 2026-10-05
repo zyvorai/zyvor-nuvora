@@ -66,7 +66,7 @@ export const navGroups: NavGroup[] = [
       { page: 'mcp_servers', label: 'MCP servers', blurb: 'Remote tool servers for agents; writing tools wait for approval.' },
       { page: 'workflows', label: 'Workflows', blurb: 'Pinned DAGs with retrieval, generation and review steps.' },
       { page: 'prompts', label: 'Prompts', blurb: 'Versioned templates with variable validation.' },
-      { page: 'recipes', label: 'Model studio', blurb: 'Export LoRA, distillation and quantization recipes for an external trainer.' },
+      { page: 'recipes', label: 'Model studio', blurb: 'Datasets, LoRA and distillation training on your trainer, or recipe export.' },
     ],
   },
   {

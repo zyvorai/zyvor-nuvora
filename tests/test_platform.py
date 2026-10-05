@@ -253,7 +253,7 @@ class PlatformTests(unittest.TestCase):
         self.assertEqual(self.app.get(self.dev,'jobs',job['id'])['status'],'interrupted')
 
     def test_recipe_does_not_claim_training(self):
-        self.assertIn('no training executed',self.app.list(self.dev,'recipes')[0]['status'])
+        self.assertEqual(self.app.list(self.dev,'recipes')[0]['status'],'exportable recipe')
 
     def test_auth_login_logout(self):
         self.auth.add_user('a','alice','Long-password-123','developer')
