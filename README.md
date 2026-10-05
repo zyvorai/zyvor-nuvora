@@ -108,11 +108,15 @@ Environment variables include `NUVORA_NODE_PORT`, `NUVORA_PROVIDER_HOSTS`, and `
 | | |
 |---|---|
 | ![Sign in](docs/ux/00-login.png) | ![Overview](docs/ux/01-overview.png) |
-| **Sign in.** Connect to the workspace, with the server named on the card. | **Overview.** Your intelligence stack, posture, and recent runs. |
+| **Sign in.** A split-screen hero, with the server named on the card. | **Overview.** Onboarding, your intelligence stack, live charts and recent runs. |
 | ![Playground](docs/ux/02-playground.png) | ![Knowledge](docs/ux/03-knowledge.png) |
-| **Playground.** Ask, ground, verify, with cited passages beside the answer. | **Knowledge.** Bases, documents, and content digests. |
+| **Playground.** Conversations, streaming, model compare and cited passages. | **Knowledge.** Bases, documents, and content digests. |
 | ![Runs](docs/ux/06-runs.png) | ![Approvals](docs/ux/07-approvals.png) |
 | **Runs.** Every step, in view. | **Approvals.** The exact action, proposer, expiry, and fingerprint. |
+| ![Command palette](docs/ux/14-command-palette.png) | ![Workflows](docs/ux/05-workflows.png) |
+| **⌘K.** Jump to any page, resource or action, or just ask. | **Workflows.** Every resource opens in a drawer; workflows draw their DAG. |
+| ![Workflow builder](docs/ux/15-workflow-builder.png) | ![Usage](docs/ux/10-usage.png) |
+| **Builder.** Add, wire and reorder steps visually, or edit the JSON. | **Usage.** Requests, tokens, cost and latency over time, against the budget. |
 | ![Evidence](docs/ux/09-evidence.png) | ![Dark mode](docs/ux/11-overview-dark.png) |
 | **Evidence.** A verifiable hash chain. | **Dark mode.** One click, remembered on this device. |
 

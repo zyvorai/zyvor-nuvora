@@ -198,7 +198,8 @@ class Platform:
             raise Fault('Model is disabled or not a chat model',409)
         return model
 
-    def chat(self,p,body,tools=None):
+    def _begin(self,p,body,tools=None):
+        """Validate, guard inputs, route, and reserve budget. Caller must _release()."""
         require(p,'developer','admin')
         messages=body.get('messages',[])
         if not isinstance(messages,list) or not 1<=len(messages)<=100:
@@ -237,31 +238,142 @@ class Platform:
             reservation=(p['tenant'],secrets.token_hex(8))
             self.reservations[reservation]=estimate
             cached=self.store.db.execute('SELECT value FROM cache WHERE tenant=? AND key=? AND expires>?',(p['tenant'],fingerprint,now)).fetchone() if use_cache else None
+        return {'model':model,'messages':cleaned,'max_tokens':maximum,'temperature':temperature,'policy':policy,'fingerprint':fingerprint,
+                'use_cache':use_cache,'key':key,'reservation':reservation,'estimate':estimate,'cached':cached,'start':time.monotonic(),
+                'routing':'lowest configured price' if body.get('model')=='auto' else 'explicit'}
+
+    def _release(self,ctx):
+        with self.billing_lock:
+            self.active[ctx['key']]-=1
+            self.reservations.pop(ctx['reservation'],None)
+
+    def _finish(self,p,ctx,result):
+        """Record usage, cache and audit for a guarded result."""
+        model,cached,estimate,maximum=ctx['model'],ctx['cached'],ctx['estimate'],ctx['max_tokens']
+        usage=result.get('usage',{})
+        inp=max(0,int(usage.get('prompt_tokens',estimate-maximum)))
+        out=max(0,int(usage.get('completion_tokens',len(result['content'])//4)))
+        cost=0 if cached else (inp*model['input_price']+out*model['output_price'])/1e6
+        latency=(time.monotonic()-ctx['start'])*1000
+        with self.store.transaction():
+            self.store.db.execute('INSERT INTO usage VALUES (?,?,?,?,?,?,?,?,?)',(secrets.token_hex(12),p['tenant'],model['id'],0 if cached else inp,0 if cached else out,cost,latency,int(bool(cached)),time.time()))
+            if ctx['use_cache'] and not cached:
+                self.store.db.execute('INSERT OR REPLACE INTO cache VALUES (?,?,?,?)',(p['tenant'],ctx['fingerprint'],canonical(result),time.time()+300))
+            self.store.audit(p['tenant'],p['username'],'inference.completed',model['id'],{'cached':bool(cached),'cost':cost,'evidence_class':result['evidence_class']})
+        return {**result,'model':model['id'],'cached':bool(cached),'cost':cost,'routing':ctx['routing'],'latency_ms':round(latency,1),
+                'usage':{'prompt_tokens':inp,'completion_tokens':out}}
+
+    def chat(self,p,body,tools=None):
+        ctx=self._begin(p,body,tools)
         try:
-            start=time.monotonic()
-            result=json.loads(cached[0]) if cached else self.providers.chat(model,cleaned,tools,maximum,temperature)
-            verdict=guard(result.get('content',''),policy)
+            result=json.loads(ctx['cached'][0]) if ctx['cached'] else self.providers.chat(ctx['model'],ctx['messages'],tools,ctx['max_tokens'],ctx['temperature'])
+            verdict=guard(result.get('content',''),ctx['policy'])
             if not verdict['allowed']:
                 raise Fault('Output refused by guardrail',422)
             result['content']=verdict['text']
             for call in result.get('tool_calls',[]):
-                verdict=guard(call.get('function',{}).get('arguments',''),policy)
+                verdict=guard(call.get('function',{}).get('arguments',''),ctx['policy'])
                 if not verdict['allowed'] or verdict['pii_redacted']:
                     raise Fault('Tool arguments refused by guardrail',422)
-            usage=result.get('usage',{})
-            inp=max(0,int(usage.get('prompt_tokens',estimate-maximum)))
-            out=max(0,int(usage.get('completion_tokens',len(result['content'])//4)))
-            cost=0 if cached else (inp*model['input_price']+out*model['output_price'])/1e6
-            with self.store.transaction():
-                self.store.db.execute('INSERT INTO usage VALUES (?,?,?,?,?,?,?,?,?)',(secrets.token_hex(12),p['tenant'],model['id'],0 if cached else inp,0 if cached else out,cost,(time.monotonic()-start)*1000,int(bool(cached)),time.time()))
-                if use_cache and not cached:
-                    self.store.db.execute('INSERT OR REPLACE INTO cache VALUES (?,?,?,?)',(p['tenant'],fingerprint,canonical(result),time.time()+300))
-                self.store.audit(p['tenant'],p['username'],'inference.completed',model['id'],{'cached':bool(cached),'cost':cost,'evidence_class':result['evidence_class']})
-            return {**result,'model':model['id'],'cached':bool(cached),'cost':cost,'routing':'lowest configured price' if body.get('model')=='auto' else 'explicit'}
+            return self._finish(p,ctx,result)
         finally:
-            with self.billing_lock:
-                self.active[key]-=1
-                self.reservations.pop(reservation,None)
+            self._release(ctx)
+
+    def open_stream(self,p,body):
+        """Validate and reserve now (so errors become HTTP errors), then return an event generator.
+
+        Output guardrails run over the cumulative text at each sentence boundary before it is
+        released, so redaction and refusals apply to streamed text exactly as to buffered text."""
+        ctx=self._begin(p,body)
+
+        def events():
+            policy=ctx['policy']
+            released=''
+            pending=''
+            usage={}
+            evidence='provider'
+            def flush(final=False):
+                nonlocal released,pending
+                cut=len(pending) if final else max(pending.rfind(x) for x in ('. ','! ','? ','\n',': '))
+                if cut<=0 and not final:
+                    return ''
+                if not final:
+                    cut+=1
+                candidate=released+pending[:cut]
+                verdict=guard(candidate,policy)
+                if not verdict['allowed']:
+                    self.store.audit(p['tenant'],p['username'],'guardrail.blocked','inference.output',{'reasons':verdict['reasons']})
+                    raise Fault('Output refused by guardrail',422)
+                text=verdict['text']
+                delta=text[len(released):] if text.startswith(released) else text
+                released=text
+                pending=pending[cut:]
+                return delta
+            try:
+                yield {'event':'start','model':ctx['model']['id'],'name':ctx['model']['name'],'routing':ctx['routing'],'cached':bool(ctx['cached'])}
+                if ctx['cached']:
+                    cached=json.loads(ctx['cached'][0])
+                    pending=cached.get('content','')
+                    usage=cached.get('usage',{})
+                    evidence=cached.get('evidence_class','provider')
+                else:
+                    for piece in self.providers.stream(ctx['model'],ctx['messages'],ctx['max_tokens'],ctx['temperature']):
+                        if 'delta' in piece:
+                            pending+=piece['delta']
+                            delta=flush()
+                            if delta:
+                                yield {'event':'delta','text':delta}
+                        if 'usage' in piece:
+                            usage=piece['usage']
+                        if 'evidence_class' in piece:
+                            evidence=piece['evidence_class']
+                delta=flush(final=True)
+                if delta:
+                    yield {'event':'delta','text':delta}
+                done=self._finish(p,ctx,{'content':released,'tool_calls':[],'usage':usage,'evidence_class':evidence})
+                yield {'event':'done',**{k:done[k] for k in ('model','cached','cost','routing','latency_ms','usage','evidence_class')}}
+            finally:
+                self._release(ctx)
+        return events()
+
+    def usage_series(self,p,days=14):
+        if not isinstance(days,int) or not 1<=days<=90:
+            raise Fault('days must be 1–90')
+        now=time.time()
+        start=now-days*86400
+        with self.store.lock:
+            daily={r['day']:dict(r) for r in self.store.db.execute(
+                "SELECT date(created,'unixepoch') AS day, COUNT(*) AS requests, SUM(input_tokens+output_tokens) AS tokens, SUM(cost) AS cost, SUM(cached) AS cache_hits, AVG(latency_ms) AS latency_ms "
+                "FROM usage WHERE tenant=? AND created>=? GROUP BY day",(p['tenant'],start)).fetchall()}
+            models=[dict(r) for r in self.store.db.execute(
+                'SELECT model, COUNT(*) AS requests, SUM(input_tokens+output_tokens) AS tokens, SUM(cost) AS cost, AVG(latency_ms) AS latency_ms '
+                'FROM usage WHERE tenant=? AND created>=? GROUP BY model ORDER BY tokens DESC',(p['tenant'],start)).fetchall()]
+            used=self.store.db.execute('SELECT COALESCE(SUM(input_tokens+output_tokens),0) FROM usage WHERE tenant=? AND created>?',(p['tenant'],now-86400)).fetchone()[0]
+        names={m['id']:m['name'] for m in self.list(p,'models')}
+        series=[]
+        for i in range(days-1,-1,-1):
+            day=time.strftime('%Y-%m-%d',time.gmtime(now-i*86400))
+            row=daily.get(day,{})
+            series.append({'date':day,'requests':row.get('requests') or 0,'tokens':row.get('tokens') or 0,'cost':row.get('cost') or 0,
+                           'cache_hits':row.get('cache_hits') or 0,'latency_ms':round(row.get('latency_ms') or 0,1)})
+        for m in models:
+            m['name']=names.get(m['model'],m['model'])
+        return {'days':series,'models':models,'budget':{'limit':self.policy(p).get('daily_tokens',1000000),'used_24h':used}}
+
+    def run_stats(self,p):
+        jobs=self.list(p,'jobs')
+        by_status={}
+        by_type={}
+        durations=[]
+        for j in jobs:
+            by_status[j['status']]=by_status.get(j['status'],0)+1
+            by_type[j['type']]=by_type.get(j['type'],0)+1
+            if j['status'] in ('completed','failed','rejected'):
+                durations.append(max(0,j['updated']-j['created']))
+        durations.sort()
+        def pct(q):
+            return round(durations[min(len(durations)-1,int(q*len(durations)))],2) if durations else 0
+        return {'total':len(jobs),'by_status':by_status,'by_type':by_type,'p50_seconds':pct(.5),'p95_seconds':pct(.95),'timing':'queue to finish'}
 
     def ingest(self,p,kb_id,body):
         require(p,'developer','admin')

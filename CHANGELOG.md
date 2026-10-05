@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **Console UX overhaul:**
+  - a split-screen sign-in
+  - a ⌘K command palette and keyboard shortcuts
+  - a playground with conversations, streaming and Stop, model compare and citation hover cards
+  - an onboarding checklist and guided empty states
+  - resource drawers with history, diff and JSON, editing for every writable kind, and `#kind/id` deep links
+  - a workflow DAG canvas and visual builder, and a run inspector with inline approval
+  - usage, overview and evaluation charts
+  - a notification bell, profile menu, password change, API keys and Settings pages, member role editing, and evidence filters with CSV export
+- **API:** `POST /api/chat/stream` (SSE with guardrail-checked deltas), `POST /api/password`, `GET`/`DELETE /api/tokens`, `POST`/`DELETE /api/users/{username}`, `GET /api/settings`, `GET /api/usage/series`, `GET /api/runs/stats`, and audit filters.
+- **Security:** demoting a member below developer revokes their service tokens. Changing your password revokes your other sessions.
+
 - **Console:** the console now uses the Zyvor Apple UX contract ported from Netra:
   - Apple tokens, light by default with dark one click away
   - grouped mega-menu navigation over 17 pages

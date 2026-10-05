@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ShieldAlert } from 'lucide-react';
 import { api, type Row } from '../api';
 import { Card, Field } from '../components/kit';
 import ResourceTable from '../components/ResourceTable';
@@ -32,7 +33,13 @@ function GuardrailTester({ act }: { act: Act }) {
 export default function Guardrails({ rows, act }: { rows: Row[]; act: Act }) {
   return (
     <div className="stack-page">
-      <ResourceTable rows={rows} columns={['name', 'redact_pii', 'detect_injection', 'daily_tokens', 'revision']} />
+      <ResourceTable
+        rows={rows}
+        columns={['name', 'redact_pii', 'detect_injection', 'daily_tokens', 'revision']}
+        emptyIcon={ShieldAlert}
+        emptyTitle="No guardrail policy"
+        emptyText="Without a policy, inputs and outputs pass unchecked. Add topic, PII, size and budget rules."
+      />
       <GuardrailTester act={act} />
     </div>
   );

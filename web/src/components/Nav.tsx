@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Theme } from '../theme';
 import { navGroups, type Page } from '../lib/navGroups';
 
@@ -12,18 +12,16 @@ export default function Nav({
   setPage,
   theme,
   onToggleTheme,
-  onLogout,
-  tenant,
-  role,
+  onSearch,
+  account,
   pendingApprovals,
 }: {
   page: Page;
   setPage: (p: Page) => void;
   theme: Theme;
   onToggleTheme: () => void;
-  onLogout: () => void;
-  tenant: string;
-  role: string;
+  onSearch: () => void;
+  account: ReactNode;
   pendingApprovals: number;
 }) {
   const [openGroup, setOpenGroup] = useState<string | null>(null);
@@ -146,16 +144,15 @@ export default function Nav({
           )}
         </div>
         <div className="nav-actions">
-          <span className="workspace-chip" title="Workspace · role">
-            <i aria-hidden />
-            {tenant} · {role}
-          </span>
-          <button type="button" className="theme-toggle" onClick={onLogout} aria-label="Log out" title="Log out">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
-              <path d="M15 4H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M10 12h11m0 0-3.5-3.5M21 12l-3.5 3.5" strokeLinecap="round" strokeLinejoin="round" />
+          <button type="button" className="nav-search" onClick={onSearch} aria-label="Search and commands" title="Search and commands (⌘K)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden>
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.5-3.5" strokeLinecap="round" />
             </svg>
+            <span>Search</span>
+            <kbd>⌘K</kbd>
           </button>
+          {account}
           <button
             type="button"
             className="theme-toggle"

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { FileText } from 'lucide-react';
 import { api, type Row } from '../api';
 import { Card, Field } from '../components/kit';
 import ResourceTable from '../components/ResourceTable';
@@ -61,7 +62,18 @@ export default function Prompts({
   const current = selected ? rows.find((r) => r.id === selected.id) || selected : null;
   return (
     <div className="stack-page">
-      <ResourceTable rows={rows} columns={['name', 'variables', 'revision']} onRow={onSelect} />
+      <ResourceTable
+        rows={rows}
+        columns={['name', 'variables', 'revision']}
+        renderAction={(r) => (
+          <button type="button" className="btn-secondary" onClick={() => onSelect(r)}>
+            Render
+          </button>
+        )}
+        emptyIcon={FileText}
+        emptyTitle="No prompts yet"
+        emptyText="Version the instructions that matter, with {{variables}} validated at render time."
+      />
       {current && <PromptPreview prompt={current} act={act} canWrite={canWrite} edit={onEdit} />}
     </div>
   );

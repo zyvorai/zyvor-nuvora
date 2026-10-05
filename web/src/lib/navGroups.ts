@@ -16,6 +16,8 @@ export const pages = [
   'usage',
   'audit',
   'users',
+  'keys',
+  'settings',
 ] as const;
 
 export type Page = (typeof pages)[number];
@@ -28,8 +30,14 @@ export function isPage(value: string): value is Page {
 }
 
 export function readPage(hash: string): Page {
-  const value = hash.replace(/^#/, '');
+  const value = hash.replace(/^#/, '').split('/')[0];
   return isPage(value) ? value : 'overview';
+}
+
+// "#agents/abc123" deep-links a resource drawer on its page.
+export function readFocus(hash: string): string | undefined {
+  const [, id] = hash.replace(/^#/, '').split('/');
+  return id ? decodeURIComponent(id) : undefined;
 }
 
 // Menu blurbs are shorter than each page's hero lede in App.tsx; navGroups.test.ts
@@ -70,6 +78,8 @@ export const navGroups: NavGroup[] = [
       { page: 'usage', label: 'Usage & cost', blurb: 'Tokens, latency and estimated spend per model.' },
       { page: 'audit', label: 'Evidence', blurb: 'The hash-chained audit trail, verifiable and exportable.' },
       { page: 'users', label: 'Access', blurb: 'Workspace members and their roles.' },
+      { page: 'keys', label: 'API keys', blurb: 'Scoped service tokens for scripts and the OpenAI-compatible API.' },
+      { page: 'settings', label: 'Settings', blurb: 'Workspace, provider allow-list, budgets and appearance.' },
     ],
   },
 ];

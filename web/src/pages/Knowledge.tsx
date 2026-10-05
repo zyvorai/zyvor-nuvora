@@ -3,6 +3,7 @@ import { ArrowRight, BookOpen, Search, Upload } from 'lucide-react';
 import { api, type Row } from '../api';
 import { Card, Field, ListEmpty } from '../components/kit';
 import type { Act } from '../lib/types';
+import { usePageActions } from '../lib/pageContext';
 
 export default function Knowledge({ rows, canWrite, act }: { rows: Row[]; canWrite: boolean; act: Act }) {
   const [selected, setSelected] = useState('');
@@ -12,6 +13,7 @@ export default function Knowledge({ rows, canWrite, act }: { rows: Row[]; canWri
   const [result, setResult] = useState<Row[]>([]);
   const [success, setSuccess] = useState('');
   const id = selected || rows[0]?.id || '';
+  const page = usePageActions();
 
   async function ingest(e: FormEvent) {
     e.preventDefault();
@@ -28,7 +30,21 @@ export default function Knowledge({ rows, canWrite, act }: { rows: Row[]; canWri
     if (r) setResult(r.citations);
   }
 
-  if (!id) return <ListEmpty icon={BookOpen} title="Create a knowledge base first" description="Use Create knowledge base above, then add documents." />;
+  if (!id)
+    return (
+      <ListEmpty
+        icon={BookOpen}
+        title="Create a knowledge base first"
+        description="A knowledge base holds documents with content digests. Retrieval cites the exact passages it used."
+        action={
+          page.create && (
+            <button type="button" className="primary" onClick={page.create}>
+              Create knowledge base
+            </button>
+          )
+        }
+      />
+    );
 
   return (
     <div className="stack-page">

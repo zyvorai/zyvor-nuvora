@@ -1,6 +1,7 @@
 """Operator-configured providers; no unrestricted URL tools."""
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 from .security import Fault, validate_url
@@ -23,6 +24,26 @@ def post_json(url, body, headers, allowlist):
         raise
     except (urllib.error.URLError,ValueError,TimeoutError) as exc:
         # Provider response bodies and auth headers must never enter API errors.
+        raise Fault('Provider request failed; check operator configuration',502) from exc
+
+
+def stream_lines(url, body, headers, allowlist):
+    """POST and yield response lines as they arrive (SSE or NDJSON), capped at 8 MiB."""
+    validate_url(url,allowlist)
+    request=urllib.request.Request(url,json.dumps(body).encode(),{'Content-Type':'application/json',**headers},method='POST')
+    total=0
+    try:
+        with urllib.request.build_opener(NoRedirect).open(request,timeout=45) as response:
+            for raw in response:
+                total+=len(raw)
+                if total>8*1024*1024:
+                    raise Fault('Provider response too large',502)
+                line=raw.decode('utf-8','replace').strip()
+                if line:
+                    yield line
+    except Fault:
+        raise
+    except (urllib.error.URLError,ValueError,TimeoutError) as exc:
         raise Fault('Provider request failed; check operator configuration',502) from exc
 
 
@@ -83,6 +104,65 @@ class Providers:
         raw=post_json(url+'/chat/completions',body,headers,self.allowed_hosts)
         msg=raw['choices'][0]['message']
         return {'content':msg.get('content') or '', 'tool_calls':msg.get('tool_calls') or [],'usage':raw.get('usage',{}),'evidence_class':'provider'}
+
+    def _auth(self,model):
+        headers={}
+        if model.get('key_env'):
+            key=os.getenv(model['key_env'])
+            if not key:
+                raise Fault('Provider credential is not configured',503)
+            headers['Authorization']='Bearer '+key
+        return headers
+
+    def stream(self,model,messages,max_tokens=1024,temperature=.2):
+        """Yield {'delta': text} pieces, then {'usage': {...}, 'evidence_class': ...}."""
+        self.validate(model)
+        kind=model['provider']
+        if kind in ('demo','bedrock'):
+            result=self.chat(model,messages,None,max_tokens,temperature)
+            words=result['content'].split(' ')
+            pause=min(.03,1.2/max(1,len(words))) if kind=='demo' else 0
+            for i,word in enumerate(words):
+                yield {'delta':(' ' if i else '')+word}
+                if pause:
+                    time.sleep(pause)
+            yield {'usage':result['usage'],'evidence_class':result['evidence_class']}
+            return
+        url=model['base_url'].rstrip('/')
+        headers=self._auth(model)
+        usage={}
+        if kind=='ollama':
+            body={'model':model['upstream_model'],'messages':messages,'stream':True,'options':{'num_predict':max_tokens,'temperature':temperature}}
+            for line in stream_lines(url+'/api/chat',body,headers,self.allowed_hosts):
+                try:
+                    chunk=json.loads(line)
+                except ValueError:
+                    continue
+                text=chunk.get('message',{}).get('content','')
+                if text:
+                    yield {'delta':text}
+                if chunk.get('done'):
+                    usage={'prompt_tokens':chunk.get('prompt_eval_count',0),'completion_tokens':chunk.get('eval_count',0)}
+            yield {'usage':usage,'evidence_class':'provider'}
+            return
+        body={'model':model['upstream_model'],'messages':messages,'max_tokens':max_tokens,'temperature':temperature,'stream':True,'stream_options':{'include_usage':True}}
+        for line in stream_lines(url+'/chat/completions',body,headers,self.allowed_hosts):
+            if not line.startswith('data:'):
+                continue
+            data=line[5:].strip()
+            if data=='[DONE]':
+                break
+            try:
+                chunk=json.loads(data)
+            except ValueError:
+                continue
+            if chunk.get('usage'):
+                usage=chunk['usage']
+            for choice in chunk.get('choices') or []:
+                text=(choice.get('delta') or {}).get('content')
+                if text:
+                    yield {'delta':text}
+        yield {'usage':usage,'evidence_class':'provider'}
 
     def embed(self,model,texts):
         if model['provider']!='openai':

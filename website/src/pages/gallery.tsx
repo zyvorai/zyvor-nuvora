@@ -23,6 +23,10 @@ const TOUR: Shot[] = [
   {src: '/09-evidence.png', caption: 'Evidence'},
   {src: '/10-usage.png', caption: 'Usage & cost'},
   {src: '/12-playground-dark.png', caption: 'Playground, dark'},
+  {src: '/14-command-palette.png', caption: 'Command palette'},
+  {src: '/15-workflow-builder.png', caption: 'Workflow builder'},
+  {src: '/16-api-keys.png', caption: 'API keys'},
+  {src: '/17-settings.png', caption: 'Settings'},
 ];
 
 function ShotCard({shot}: {shot: Shot}) {

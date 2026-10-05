@@ -34,9 +34,9 @@ export function TableWrap({ children, className }: { children: ReactNode; classN
   return <div className={className ? `table-wrap ${className}` : 'table-wrap'}>{children}</div>;
 }
 
-type ListEmptyProps = { title: string; description?: ReactNode; action?: ReactNode; icon?: LucideIcon };
+type ListEmptyProps = { title: string; description?: ReactNode; action?: ReactNode; secondary?: ReactNode; icon?: LucideIcon };
 
-export function ListEmpty({ title, description, action, icon: Icon }: ListEmptyProps) {
+export function ListEmpty({ title, description, action, secondary, icon: Icon }: ListEmptyProps) {
   return (
     <div className="list-empty">
       {Icon && (
@@ -46,7 +46,22 @@ export function ListEmpty({ title, description, action, icon: Icon }: ListEmptyP
       )}
       <h3>{title}</h3>
       {description && <p>{description}</p>}
-      {action}
+      {(action || secondary) && (
+        <div className="list-empty__actions">
+          {action}
+          {secondary}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function Skeleton({ rows = 3, label = 'Loading' }: { rows?: number; label?: string }) {
+  return (
+    <div className="skeleton-stack" role="status" aria-label={label}>
+      {Array.from({ length: rows }, (_, i) => (
+        <span key={i} className="skeleton" style={{ width: `${92 - ((i * 17) % 35)}%` }} />
+      ))}
     </div>
   );
 }
@@ -85,9 +100,9 @@ export function Field({ label, children }: { label: string; children: ReactNode 
   );
 }
 
-const GOOD = new Set(['completed', 'approved', 'verified', 'enabled']);
-const BAD = new Set(['failed', 'rejected', 'unverified', 'expired']);
-const WARN = new Set(['pending', 'waiting_approval', 'synthetic', 'needs_review']);
+const GOOD = new Set(['completed', 'approved', 'verified', 'enabled', 'passed', 'running']);
+const BAD = new Set(['failed', 'rejected', 'unverified', 'expired', 'stopped']);
+const WARN = new Set(['pending', 'waiting', 'waiting_approval', 'synthetic', 'needs_review']);
 
 export function Badge({ value }: { value: string }) {
   const v = String(value ?? '');

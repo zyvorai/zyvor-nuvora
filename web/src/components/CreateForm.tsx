@@ -3,13 +3,15 @@ import { ArrowRight } from 'lucide-react';
 import type { Row } from '../api';
 import type { Collections } from '../lib/types';
 import { Field } from './kit';
+import { WorkflowBuilder } from './WorkflowCanvas';
+import { topoOrder, type Step } from '../lib/dag';
 
 const KEYS: Record<string, string[]> = {
   actions: ['url', 'method', 'key_env', 'description'],
-  models: ['provider', 'base_url', 'upstream_model', 'key_env', 'region', 'input_price', 'output_price', 'capability'],
+  models: ['provider', 'base_url', 'upstream_model', 'key_env', 'region', 'input_price', 'output_price', 'capability', 'enabled'],
   knowledge: ['embedding_model'],
   agents: ['model', 'system_prompt', 'knowledge_ids', 'tools', 'max_steps'],
-  prompts: ['template', 'expected_revision'],
+  prompts: ['template'],
   policies: ['redact_pii', 'detect_injection', 'max_chars', 'daily_tokens', 'blocked_topics'],
   recipes: ['model', 'method', 'dataset', 'rank', 'epochs'],
   evaluations: ['model', 'pass_threshold'],
@@ -36,41 +38,47 @@ export default function CreateForm({
 }) {
   const chatModels = (collections.models || []).filter((m) => m.capability === 'chat');
   const firstModel = chatModels[0]?.id || '';
-  const [data, setData] = useState<Row>(
-    existing
-      ? { name: existing.name, template: existing.template, expected_revision: existing.revision }
-      : {
-          name: '',
-          provider: 'openai',
-          base_url: 'http://127.0.0.1:8000/v1',
-          upstream_model: '',
-          capability: 'chat',
-          input_price: 0,
-          output_price: 0,
-          model: firstModel,
-          tools: ['knowledge_search'],
-          url: 'https://api.internal.example/status',
-          knowledge_ids: [],
-          max_steps: 5,
-          template: 'Answer {{question}} using {{evidence}}.',
-          redact_pii: true,
-          detect_injection: true,
-          max_chars: 100000,
-          daily_tokens: 1000000,
-          blocked_topics: [],
-          method: kind === 'actions' ? 'GET' : 'lora',
-          dataset: './data/train.jsonl',
-          pass_threshold: 1,
-        }
-  );
-  const [json, setJSON] = useState(
-    kind === 'actions'
-      ? JSON.stringify({ type: 'object', properties: { query: { type: 'string' } }, required: [] }, null, 2)
-      : kind === 'workflows'
-        ? JSON.stringify([{ id: 'answer', type: 'generate', model: firstModel, depends_on: ['input'] }], null, 2)
-        : JSON.stringify([{ input: 'Explain private AI', contains: ['AI'], excludes: [] }], null, 2)
-  );
+  const defaults: Row = {
+    name: '',
+    provider: 'openai',
+    base_url: 'http://127.0.0.1:8000/v1',
+    upstream_model: '',
+    capability: 'chat',
+    input_price: 0,
+    output_price: 0,
+    model: firstModel,
+    tools: ['knowledge_search'],
+    url: 'https://api.internal.example/status',
+    knowledge_ids: [],
+    max_steps: 5,
+    template: 'Answer {{question}} using {{evidence}}.',
+    redact_pii: true,
+    detect_injection: true,
+    max_chars: 100000,
+    daily_tokens: 1000000,
+    blocked_topics: [],
+    method: kind === 'actions' ? 'GET' : 'lora',
+    dataset: './data/train.jsonl',
+    pass_threshold: 1,
+    enabled: true,
+  };
+  const [data, setData] = useState<Row>(existing ? { ...defaults, ...existing, expected_revision: existing.revision } : defaults);
+  const sampleJSON: Record<string, unknown> = {
+    actions: existing?.input_schema ?? { type: 'object', properties: { query: { type: 'string' } }, required: [] },
+    workflows: existing?.steps ?? [{ id: 'answer', type: 'generate', model: firstModel, depends_on: ['input'] }],
+    evaluations: existing?.cases ?? [{ input: 'Explain private AI', contains: ['AI'], excludes: [] }],
+  };
+  const [json, setJSON] = useState(JSON.stringify(sampleJSON[kind] ?? sampleJSON.evaluations, null, 2));
   const [error, setError] = useState('');
+  const [visual, setVisual] = useState(kind === 'workflows');
+  const steps: Step[] | null = (() => {
+    try {
+      const v = JSON.parse(json);
+      return Array.isArray(v) ? v : null;
+    } catch {
+      return null;
+    }
+  })();
   const set = (k: string, v: unknown) => setData({ ...data, [k]: v });
 
   function field(k: string, label: string, type = 'text') {
@@ -93,8 +101,12 @@ export default function CreateForm({
     try {
       const body: Row = { name: data.name };
       for (const k of KEYS[kind] || []) if (data[k] !== undefined) body[k] = data[k];
+      if (existing) body.expected_revision = existing.revision;
       if (kind === 'actions') body.input_schema = JSON.parse(json);
-      if (kind === 'workflows') body.steps = JSON.parse(json);
+      if (kind === 'workflows') {
+        const parsed = JSON.parse(json);
+        body.steps = (Array.isArray(parsed) && topoOrder(parsed)) || parsed;
+      }
       if (kind === 'evaluations') body.cases = JSON.parse(json);
       save(body);
     } catch (err) {
@@ -158,6 +170,10 @@ export default function CreateForm({
             {field('input_price', 'USD / million input tokens', 'number')}
             {field('output_price', 'USD / million output tokens', 'number')}
           </div>
+          <label className="check">
+            <input type="checkbox" checked={!!data.enabled} onChange={(e) => set('enabled', e.target.checked)} />
+            Enabled for routing
+          </label>
         </>
       )}
       {kind === 'knowledge' && (
@@ -254,7 +270,18 @@ export default function CreateForm({
           <p className="note">Configuration export only. No GPU job is executed.</p>
         </>
       )}
-      {['evaluations', 'workflows'].includes(kind) && (
+      {kind === 'workflows' && (
+        <div className="tabs" role="tablist" aria-label="Workflow editor">
+          <button type="button" role="tab" aria-selected={visual} onClick={() => steps && setVisual(true)} disabled={!steps}>
+            Visual builder
+          </button>
+          <button type="button" role="tab" aria-selected={!visual} onClick={() => setVisual(false)}>
+            JSON
+          </button>
+        </div>
+      )}
+      {kind === 'workflows' && visual && steps && <WorkflowBuilder steps={steps} collections={collections} onChange={(next) => setJSON(JSON.stringify(next, null, 2))} />}
+      {['evaluations', 'workflows'].includes(kind) && !(kind === 'workflows' && visual && steps) && (
         <>
           <Field label={kind === 'workflows' ? 'Workflow steps (JSON)' : 'Test cases (JSON)'}>
             <textarea className="code-input" rows={12} value={json} onChange={(e) => setJSON(e.target.value)} required />

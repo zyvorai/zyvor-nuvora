@@ -1,7 +1,11 @@
 import { Activity, ArrowRight, BookOpen, Bot, Cpu, KeyRound, ShieldCheck, Wallet } from 'lucide-react';
-import { money, time, type Row } from '../api';
+import { useEffect, useState } from 'react';
+import { api, money, time, type Row } from '../api';
+import { AreaChart, Donut, Sparkline } from '../components/charts';
 import { Badge, Card, ListEmpty } from '../components/kit';
 import type { Page } from '../lib/navGroups';
+import type { Collections } from '../lib/types';
+import Onboarding from '../components/Onboarding';
 
 const layers: [typeof Cpu, string, string, Page][] = [
   [Cpu, 'Model layer', 'Local, hosted, or your own endpoint', 'models'],
@@ -12,24 +16,45 @@ const layers: [typeof Cpu, string, string, Page][] = [
 
 export default function Overview({
   overview,
+  collections,
   principal,
   pendingApprovals,
   onNavigate,
   onInspectRun,
+  refresh = 0,
 }: {
   overview: Row;
+  collections: Collections;
   principal: Row;
   pendingApprovals: number;
   onNavigate: (p: Page) => void;
   onInspectRun: (run: Row) => void;
+  refresh?: number;
 }) {
+  const [series, setSeries] = useState<Row | null>(null);
+  const [stats, setStats] = useState<Row | null>(null);
+  useEffect(() => {
+    let live = true;
+    api('/api/usage/series?days=14')
+      .then((r) => live && setSeries(r))
+      .catch(() => {});
+    api('/api/runs/stats')
+      .then((r) => live && setStats(r))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [refresh]);
+  const days: Row[] = series?.days || [];
+  const runsPerDay = days.map((d) => (collections.jobs || []).filter((j) => new Date(j.created * 1000).toISOString().slice(0, 10) === d.date).length);
   const verified = Boolean(overview.audit?.valid);
-  const figures: [string, string | number][] = [
-    ['Models', overview.counts?.models || 0],
-    ['Knowledge bases', overview.counts?.knowledge || 0],
-    ['Agent runs', overview.counts?.jobs || 0],
-    ['Tokens', overview.usage?.tokens?.toLocaleString() || 0],
+  const figures: [string, string | number, number[] | null][] = [
+    ['Models', overview.counts?.models || 0, null],
+    ['Knowledge bases', overview.counts?.knowledge || 0, null],
+    ['Runs', overview.counts?.jobs || 0, days.length ? runsPerDay : null],
+    ['Tokens', overview.usage?.tokens?.toLocaleString() || 0, days.length ? days.map((d) => d.tokens) : null],
   ];
+  const tones: Record<string, string> = { completed: 'green', failed: 'red', rejected: 'red', waiting_approval: 'amber', queued: 'blue', running: 'cyan' };
   return (
     <div className="overview">
       <header className="hero">
@@ -50,6 +75,8 @@ export default function Overview({
         </div>
       </header>
 
+      <Onboarding collections={collections} overview={overview} principal={principal} onNavigate={onNavigate} />
+
       <section className="overview-stage" aria-labelledby="overview-stage-title">
         <div className="overview-stage__head">
           <h2 id="overview-stage-title">Your intelligence stack</h2>
@@ -69,10 +96,11 @@ export default function Overview({
           ))}
         </div>
         <div className="apple-metric-band">
-          {figures.map(([label, value]) => (
+          {figures.map(([label, value, trend]) => (
             <div key={label}>
               <span>{label}</span>
               <b>{value}</b>
+              {trend && <Sparkline values={trend} label={`${label} per day, last 14 days`} />}
             </div>
           ))}
         </div>
@@ -104,7 +132,16 @@ export default function Overview({
               ))}
             </div>
           ) : (
-            <ListEmpty title="Ready for your first run" description="Try the knowledge investigator in Agents." />
+            <ListEmpty
+              icon={Activity}
+              title="Ready for your first run"
+              description="Try the knowledge investigator in Agents."
+              action={
+                <button type="button" className="primary" onClick={() => onNavigate('agents')}>
+                  Run an agent
+                </button>
+              }
+            />
           )}
         </Card>
         <Card title="Workspace posture">
@@ -126,6 +163,39 @@ export default function Overview({
             </div>
           </div>
           <p className="note">Evaluation release. Offline demo results are synthetic. Connect a real provider to run model inference.</p>
+        </Card>
+        <Card
+          className="span2"
+          title="Inference, last 14 days"
+          actions={
+            <button type="button" className="link" onClick={() => onNavigate('usage')}>
+              Usage & cost <ArrowRight size={14} />
+            </button>
+          }
+        >
+          {series ? (
+            <AreaChart
+              height={160}
+              labels={days.map((d) => new Date(d.date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))}
+              series={[
+                { label: 'Requests', values: days.map((d) => d.requests), tone: 'blue' },
+                { label: 'Cache hits', values: days.map((d) => d.cache_hits), tone: 'green' },
+              ]}
+              title="Requests and cache hits per day"
+            />
+          ) : null}
+        </Card>
+        <Card title="Run outcomes">
+          {stats?.total ? (
+            <>
+              <Donut label={`${stats.total} runs by status`} parts={Object.entries(stats.by_status as Record<string, number>).map(([k, v]) => ({ label: k.replaceAll('_', ' '), value: v, tone: tones[k] || 'graphite' }))} />
+              <p className="small muted">
+                Median {stats.p50_seconds ?? '—'}s · p95 {stats.p95_seconds ?? '—'}s, {stats.timing}
+              </p>
+            </>
+          ) : (
+            <ListEmpty title="No runs yet" description="Outcomes appear after the first agent, workflow or evaluation run." />
+          )}
         </Card>
       </div>
     </div>

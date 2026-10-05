@@ -13,7 +13,7 @@ const user=process.env.NUVORA_TEST_USER||'admin';
 const password=process.env.NUVORA_TEST_PASSWORD||'Nuvora-Test-Password-123';
 const shots=path.resolve(process.env.NUVORA_SCREENSHOT_DIR||path.join(process.cwd(),'docs','screenshots'));
 
-const pages=['overview','playground','models','knowledge','agents','actions','workflows','prompts','recipes','jobs','evaluations','batches','approvals','policies','usage','audit','users'];
+const pages=['overview','playground','models','knowledge','agents','actions','workflows','prompts','recipes','jobs','evaluations','batches','approvals','policies','usage','audit','users','keys','settings'];
 
 (async()=>{
   fs.mkdirSync(shots,{recursive:true});
@@ -48,9 +48,22 @@ const pages=['overview','playground','models','knowledge','agents','actions','wo
   await page.getByLabel('Grounding').selectOption({label:'Zyvor field guide'});
   await page.getByRole('button',{name:'Generate answer'}).click();
   await page.getByRole('heading',{name:'Response',exact:true}).waitFor();
+  await page.getByRole('button',{name:'Generate answer'}).waitFor({timeout:30000});
   assert((await page.locator('.answer').innerText()).includes('OFFLINE DEMO'));checks++;
   assert(await page.locator('.citation').count()>0);checks++;
+  await page.getByLabel('Your question').fill('And who approves production changes?');
+  await page.getByRole('button',{name:'Generate answer'}).click();
+  await page.locator('.bubble.user').nth(1).waitFor();
+  await page.getByRole('button',{name:'Generate answer'}).waitFor({timeout:30000});
+  assert.equal(await page.locator('.answer').count(),2);checks++;
   await shot('02-playground');
+
+  await page.keyboard.press('Control+k');
+  await page.getByRole('combobox',{name:'Command'}).fill('setings');
+  await page.waitForTimeout(200);
+  await page.screenshot({path:path.join(shots,'14-command-palette.png')});
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(()=>location.hash==='#settings');checks++;
 
   await go('knowledge');
   await page.getByLabel('Document title').fill('Browser test guide');
@@ -71,9 +84,19 @@ const pages=['overview','playground','models','knowledge','agents','actions','wo
 
   await go('workflows');
   await page.getByRole('button',{name:'Research → review → answer',exact:true}).click();
-  await page.getByRole('button',{name:'Start workflow'}).click();
-  await page.getByRole('status').waitFor();checks++;
+  const drawer=page.getByRole('dialog',{name:'Research → review → answer'});
+  await drawer.locator('svg.dag').waitFor();checks++;
+  await drawer.getByRole('button',{name:'Start workflow'}).click();
+  await drawer.getByRole('status').waitFor();checks++;
   await shot('05-workflows');
+  await drawer.getByRole('tab',{name:'History'}).click();
+  await drawer.getByText('Current revision').waitFor();checks++;
+  await drawer.getByRole('button',{name:'Edit',exact:true}).click();
+  await page.getByRole('tab',{name:'Visual builder'}).waitFor();
+  await page.waitForTimeout(400);
+  await page.screenshot({path:path.join(shots,'15-workflow-builder.png')});checks++;
+  await page.getByRole('button',{name:'Close dialog'}).click();
+  await page.keyboard.press('Escape');
 
   await go('evaluations');
   await page.getByRole('button',{name:'Evaluate',exact:true}).first().click();
@@ -88,6 +111,19 @@ const pages=['overview','playground','models','knowledge','agents','actions','wo
   await page.getByRole('button',{name:'Check policy'}).click();
   await page.getByText(/\[EMAIL\]/).waitFor();checks++;
   await shot('08-guardrails');
+
+  await go('keys');
+  await page.getByLabel('Label').fill('Browser smoke key');
+  await page.getByRole('button',{name:'Create key'}).click();
+  await page.getByText('Copy this key now. It is shown only once.').waitFor();checks++;
+  await page.getByRole('button',{name:'Revoke Browser smoke key'}).click();
+  await page.getByRole('button',{name:'Revoke',exact:true}).click();
+  await page.getByText('No active API keys').or(page.getByText('Browser smoke key').locator('xpath=ancestor::tr').filter({hasNot:page.locator('code')})).first().waitFor().catch(()=>{});
+  await page.getByRole('button',{name:'I saved it'}).click();
+  await shot('16-api-keys');
+  await go('settings');
+  await page.getByText('Provider allow-list',{exact:true}).waitFor();checks++;
+  await shot('17-settings');
 
   for(const name of pages){await go(name);checks++}
   await go('audit');await page.getByText('Chain verified').waitFor();checks++;await shot('09-evidence');
@@ -110,7 +146,8 @@ const pages=['overview','playground','models','knowledge','agents','actions','wo
   await go('overview');await shot('13-mobile-dark');
   await page.getByRole('button',{name:'Switch to light mode'}).click();
 
-  await page.getByRole('button',{name:'Log out'}).click();
+  await page.getByRole('button',{name:/^Account/}).click();
+  await page.getByRole('menuitem',{name:'Log out'}).click();
   await page.getByRole('heading',{name:'Sign in.'}).waitFor();checks++;
 
   assert.deepEqual(failures,[]);

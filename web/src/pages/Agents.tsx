@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Play } from 'lucide-react';
+import { Bot, Play } from 'lucide-react';
 import { api, type Row } from '../api';
 import { Card, Field } from '../components/kit';
 import ResourceTable from '../components/ResourceTable';
@@ -44,7 +44,9 @@ export default function Agents({ rows, canWrite, act }: { rows: Row[]; canWrite:
       <ResourceTable
         rows={rows}
         columns={['name', 'model', 'tools', 'max_steps']}
-        onRow={setDetails}
+        emptyIcon={Bot}
+        emptyTitle="No agents yet"
+        emptyText="An agent pairs a model with registered tools and a step limit. Writes and external actions wait for approval."
         renderAction={(r) => (
           <button type="button" className="btn-secondary" disabled={!canWrite} onClick={() => setDetails(r)}>
             <Play size={14} />

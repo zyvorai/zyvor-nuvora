@@ -20,7 +20,7 @@ Provider network tests ran against a local HTTP stub for OpenAI-compatible compl
   - the PVC bound on `local-path`
   - `/healthz` reachable externally, and a wrong login refused with 401
 - The Playwright browser smoke against that deployment: **52 checks passed**.
-  - Covers sign-in errors, the mega menu, all 17 pages, and the evaluate-to-runs flow.
+  - Covers sign-in errors, the mega menu, all 19 pages, and the evaluate-to-runs flow.
   - Covers evidence-chain verification, dark mode persisting across a reload, no horizontal overflow at 390px, and logout.
   - The screenshots in `docs/ux/` are from this run.
 - `helm lint`, `helm template`, `shellcheck`, and `scripts/ci-deploy-guards.sh` (32 checks) passed.

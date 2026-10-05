@@ -9,8 +9,13 @@ Prefix `/api`; inference compatibility prefix `/v1`. Responses are JSON. Body si
 | `/api/login` | POST | `{tenant, username, password}` → principal + CSRF; HttpOnly session cookie |
 | `/api/session` | GET | Current principal and CSRF |
 | `/api/logout` | POST | Revoke the current session/token |
-| `/api/tokens` | POST | Admin/developer: `{role: viewer\|developer, lifetime: seconds}`; token returned once |
+| `/api/password` | POST | `{current, new}`; changes your password and revokes your other sessions |
+| `/api/tokens` | POST | Admin/developer: `{role: viewer\|developer, lifetime: seconds, label?}`; token returned once |
+| `/api/tokens` | GET | Active service tokens (id, owner, role, label, created, expires). Admins see the workspace; others see their own |
+| `/api/tokens/{id}` | DELETE | Revoke a service token. Owner or administrator |
 | `/api/users` | GET / POST | Tenant administrator lists/creates members |
+| `/api/users/{username}` | POST / DELETE | Administrator changes a member's `{role}` or removes them. You cannot change or remove yourself, and the last administrator is protected. Demoting a member below developer revokes their service tokens |
+| `/api/settings` | GET | Administrator: release, transport, worker state, provider allow-list, guardrail policy, today's budget and server limits |
 
 Viewer: read/retrieve. Developer: inference, ingestion, prompt/agent/workflow creation, submissions. Approver: read and approval decisions. Admin: tenant configuration and user management; may also develop/approve, but never self-approve.
 
@@ -29,6 +34,7 @@ Read-only collections: `documents`, `memory`, `jobs`, `approvals`. Document inge
 | Endpoint | Body | Behavior |
 |---|---|---|
 | POST `/api/chat` | `model`, `messages`, optional `max_tokens`, `temperature`, `cache` | Provider response + usage/evidence/cost |
+| POST `/api/chat/stream` | Same as `/api/chat` | `text/event-stream`: one `start` (model, routing, cached), `delta` events with guardrail-checked text released at sentence boundaries, then `done` (usage, cost, latency, evidence class) or `error` (`{error}`) |
 | GET `/v1/models` | — | OpenAI-shaped model list |
 | POST `/v1/chat/completions` | OpenAI-style model/messages | Chat envelope; optional buffered SSE when `stream=true` |
 | POST `/api/knowledge/{id}/ingest` | `name`, `text`, optional `source`, `chunk_size`, `overlap` | New/replaced document, content digest |
@@ -61,6 +67,10 @@ POST `/api/prompts/{id}/render` body `{variables: {key: value}}`.
 POST `/api/recipes/{id}/export` returns a `TrainingRecipe` configuration. No training runs.
 
 GET `/api/overview`, `/api/usage`, `/api/audit`, `/api/tools` provide workspace summary, inference ledger, audit verification and the registered internal tools.
+
+`/api/audit` accepts `actor`, `action` (prefix, such as `approval.`) and `since` / `until` (Unix seconds). Verification always covers the whole chain, not just the filtered page.
+
+GET `/api/usage/series?days=1..90` returns daily buckets (requests, tokens, cost, latency, cache hits), a per-model breakdown and today's budget. GET `/api/runs/stats` returns run counts by status and kind and median duration.
 
 POST `/mcp` supports a small JSON-RPC tools subset: initialize, tools/list, tools/call. `list_models` and `search_knowledge` are read-only. It is not a full MCP streaming transport.
 

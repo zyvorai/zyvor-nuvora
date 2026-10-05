@@ -70,21 +70,100 @@ class Auth:
                 self.failures[key]=attempts+[time.time()]
                 raise Fault('Wrong tenant, username or password',401)
             self.failures.pop(key,None)
-            token=secrets.token_urlsafe(32)
-            self.store.db.execute('INSERT INTO tokens VALUES (?,?,?,?,?)',(hashlib.sha256(token.encode()).hexdigest(),tenant,username,row['role'],time.time()+8*3600))
+            token=self._insert(tenant,username,row['role'],8*3600,'session')
         self.store.audit(tenant,username,'session.created',username)
         return token
 
-    def issue(self, principal, role="viewer", lifetime=3600):
+    def _insert(self, tenant, username, role, lifetime, kind, label=''):
+        token=secrets.token_urlsafe(32)
+        now=time.time()
+        self.store.db.execute('INSERT INTO tokens (digest,tenant,username,role,expires,id,kind,label,created) VALUES (?,?,?,?,?,?,?,?,?)',
+                              (hashlib.sha256(token.encode()).hexdigest(),tenant,username,role,now+lifetime,secrets.token_hex(8),kind,label,now))
+        return token
+
+    def issue(self, principal, role="viewer", lifetime=3600, label=''):
         if principal['role'] not in ('admin','developer') or role not in ('viewer','developer'):
             raise Fault('Service tokens may only view or propose',403)
         if not isinstance(lifetime,int) or not 60<=lifetime<=86400*30:
             raise Fault('Token lifetime must be 60 seconds to 30 days')
-        token=secrets.token_urlsafe(32)
+        if not isinstance(label,str) or len(label)>80:
+            raise Fault('Token labels are at most 80 characters')
         with self.store.lock:
-            self.store.db.execute('INSERT INTO tokens VALUES (?,?,?,?,?)',(hashlib.sha256(token.encode()).hexdigest(),principal['tenant'],principal['username'],role,time.time()+lifetime))
-        self.store.audit(principal['tenant'],principal['username'],'service_token.created',role,{'lifetime':lifetime})
-        return {'token':token,'role':role,'expires':time.time()+lifetime}
+            token=self._insert(principal['tenant'],principal['username'],role,lifetime,'service',label.strip())
+            row=self.store.db.execute('SELECT id FROM tokens WHERE digest=?',(hashlib.sha256(token.encode()).hexdigest(),)).fetchone()
+        self.store.audit(principal['tenant'],principal['username'],'service_token.created',role,{'lifetime':lifetime,'id':row['id']})
+        return {'token':token,'id':row['id'],'role':role,'label':label.strip(),'expires':time.time()+lifetime}
+
+    def list_tokens(self, principal):
+        query='SELECT id,username,role,label,created,expires FROM tokens WHERE tenant=? AND kind=\'service\' AND expires>?'
+        args=[principal['tenant'],time.time()]
+        if principal['role']!='admin':
+            query+=' AND username=?'
+            args.append(principal['username'])
+        with self.store.lock:
+            rows=self.store.db.execute(query+' ORDER BY created DESC',args).fetchall()
+        return [dict(r) for r in rows]
+
+    def revoke_token(self, principal, id):
+        with self.store.lock:
+            row=self.store.db.execute("SELECT username FROM tokens WHERE tenant=? AND kind='service' AND id=?",(principal['tenant'],id)).fetchone()
+            if not row:
+                raise KeyError('Token not found')
+            if principal['role']!='admin' and row['username']!=principal['username']:
+                raise Fault('Only the owner or an administrator can revoke this token',403)
+            self.store.db.execute("DELETE FROM tokens WHERE tenant=? AND kind='service' AND id=?",(principal['tenant'],id))
+        self.store.audit(principal['tenant'],principal['username'],'service_token.revoked',id)
+
+    def change_password(self, principal, current, new, keep_token):
+        tenant,username=principal['tenant'],principal['username']
+        if not isinstance(new,str) or not 12<=len(new)<=256:
+            raise Fault('Passwords must contain 12–256 characters')
+        with self.store.lock:
+            row=self.store.db.execute('SELECT password FROM users WHERE tenant=? AND username=?',(tenant,username)).fetchone()
+            if not row or not password_matches(current if isinstance(current,str) else '',row['password']):
+                raise Fault('Current password is incorrect',403)
+            if new==current:
+                raise Fault('Choose a password different from the current one')
+            self.store.db.execute('UPDATE users SET password=? WHERE tenant=? AND username=?',(password_hash(new),tenant,username))
+            keep=hashlib.sha256(keep_token.encode()).hexdigest()
+            self.store.db.execute("DELETE FROM tokens WHERE tenant=? AND username=? AND kind='session' AND digest!=?",(tenant,username,keep))
+        self.store.audit(tenant,username,'user.password_changed',username)
+
+    def _admins(self, tenant):
+        return self.store.db.execute("SELECT COUNT(*) FROM users WHERE tenant=? AND role='admin'",(tenant,)).fetchone()[0]
+
+    def set_role(self, principal, username, role):
+        require(principal,'admin')
+        if role not in ROLES:
+            raise Fault('Invalid role')
+        if username==principal['username']:
+            raise Fault('You cannot change your own role',409)
+        with self.store.lock:
+            row=self.store.db.execute('SELECT role FROM users WHERE tenant=? AND username=?',(principal['tenant'],username)).fetchone()
+            if not row:
+                raise KeyError('User not found')
+            if row['role']=='admin' and role!='admin' and self._admins(principal['tenant'])<=1:
+                raise Fault('A workspace needs at least one administrator',409)
+            self.store.db.execute('UPDATE users SET role=? WHERE tenant=? AND username=?',(role,principal['tenant'],username))
+            self.store.db.execute("UPDATE tokens SET role=? WHERE tenant=? AND username=? AND kind='session'",(role,principal['tenant'],username))
+            revoked=0
+            if role not in ('admin','developer'):
+                revoked=self.store.db.execute("DELETE FROM tokens WHERE tenant=? AND username=? AND kind='service'",(principal['tenant'],username)).rowcount
+        self.store.audit(principal['tenant'],principal['username'],'user.role_changed',username,{'from':row['role'],'to':role,'service_tokens_revoked':revoked})
+
+    def remove_user(self, principal, username):
+        require(principal,'admin')
+        if username==principal['username']:
+            raise Fault('You cannot remove yourself',409)
+        with self.store.lock:
+            row=self.store.db.execute('SELECT role FROM users WHERE tenant=? AND username=?',(principal['tenant'],username)).fetchone()
+            if not row:
+                raise KeyError('User not found')
+            if row['role']=='admin' and self._admins(principal['tenant'])<=1:
+                raise Fault('A workspace needs at least one administrator',409)
+            self.store.db.execute('DELETE FROM users WHERE tenant=? AND username=?',(principal['tenant'],username))
+            self.store.db.execute('DELETE FROM tokens WHERE tenant=? AND username=?',(principal['tenant'],username))
+        self.store.audit(principal['tenant'],principal['username'],'user.removed',username)
 
     def principal(self, token):
         with self.store.lock:

@@ -47,6 +47,10 @@ class Store:
           tenant TEXT NOT NULL, key TEXT NOT NULL, fingerprint TEXT NOT NULL,
           value TEXT NOT NULL, PRIMARY KEY(tenant,key));
         ''')
+        columns={r['name'] for r in self.db.execute('PRAGMA table_info(tokens)')}
+        for name,ddl in (('id',"TEXT NOT NULL DEFAULT ''"),('kind',"TEXT NOT NULL DEFAULT 'session'"),('label',"TEXT NOT NULL DEFAULT ''"),('created',"REAL NOT NULL DEFAULT 0")):
+            if name not in columns:
+                self.db.execute(f'ALTER TABLE tokens ADD COLUMN {name} {ddl}')
 
     @contextmanager
     def transaction(self):
@@ -103,10 +107,15 @@ class Store:
             digest = hashlib.sha256((previous+event).encode()).hexdigest()
             self.db.execute('INSERT INTO audit (tenant,event,previous,digest) VALUES (?,?,?,?)',(tenant,event,previous,digest))
 
-    def events(self, tenant):
+    def events(self, tenant, actor=None, action=None, since=None, until=None):
         with self.lock:
             rows = self.db.execute('SELECT * FROM audit WHERE tenant=? ORDER BY seq',(tenant,)).fetchall()
-        return [{'seq':r['seq'],**json.loads(r['event']),'previous':r['previous'],'digest':r['digest']} for r in rows]
+        events=[{'seq':r['seq'],**json.loads(r['event']),'previous':r['previous'],'digest':r['digest']} for r in rows]
+        return [e for e in events
+                if (not actor or e['actor']==actor)
+                and (not action or e['action']==action or e['action'].startswith(action+'.'))
+                and (since is None or e['time']>=since)
+                and (until is None or e['time']<=until)]
 
     def verify(self, tenant):
         previous = '0'*64

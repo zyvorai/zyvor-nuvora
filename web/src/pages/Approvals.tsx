@@ -40,7 +40,13 @@ export default function Approvals({ rows, principal, canApprove, act }: { rows: 
           );
         })
       ) : (
-        <ListEmpty icon={ShieldCheck} title="No decisions waiting" description="Workflow review steps, memory writes and external actions appear here." />
+        <ListEmpty icon={ShieldCheck} title="No decisions waiting" description="Workflow review steps, memory writes and external actions appear here."
+          action={
+            <a className="buttonlike btn-secondary" href="#workflows">
+              Start a reviewed workflow
+            </a>
+          }
+        />
       )}
     </Card>
   );

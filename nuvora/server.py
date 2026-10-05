@@ -49,6 +49,35 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
+    def sse(self,events):
+        """Stream server-sent events; the connection closes when the generator ends."""
+        self.send_response(200)
+        self.send_header('Content-Type','text/event-stream; charset=utf-8')
+        self.send_header('Cache-Control','no-store')
+        self.send_header('X-Content-Type-Options','nosniff')
+        self.send_header('X-Accel-Buffering','no')
+        self.send_header('Connection','close')
+        self.end_headers()
+        self.close_connection=True
+        def write(event,data):
+            self.wfile.write(('event: '+event+'\ndata: '+canonical(data)+'\n\n').encode())
+            self.wfile.flush()
+        try:
+            for item in events:
+                event=item.pop('event','message')
+                write(event,item)
+        except Fault as exc:
+            write('error',{'error':str(exc),'status':exc.status})
+        except (BrokenPipeError,ConnectionResetError):
+            events.close()
+        except Exception:
+            traceback.print_exc()
+            write('error',{'error':'Internal error','status':500})
+
+    def query(self):
+        from urllib.parse import parse_qs
+        return {k:v[-1] for k,v in parse_qs(urlsplit(self.path).query).items()}
+
     def token(self):
         authorization=self.headers.get('Authorization','')
         if authorization.startswith('Bearer '):
@@ -137,13 +166,66 @@ class Handler(BaseHTTPRequestHandler):
                 self.respond(200,app.usage(p))
                 return
             if path=='/api/audit':
-                self.respond(200,{'events':app.store.events(p['tenant']),'verification':app.store.verify(p['tenant'])})
+                q=self.query()
+                def stamp(name):
+                    try:
+                        return float(q[name]) if q.get(name) else None
+                    except ValueError as exc:
+                        raise Fault(name+' must be a Unix timestamp') from exc
+                events=app.store.events(p['tenant'],q.get('actor') or None,q.get('action') or None,stamp('since'),stamp('until'))
+                self.respond(200,{'events':events,'verification':app.store.verify(p['tenant'])})
+                return
+            if path=='/api/usage/series':
+                try:
+                    days=int(self.query().get('days','14'))
+                except ValueError as exc:
+                    raise Fault('days must be an integer') from exc
+                self.respond(200,app.usage_series(p,days))
+                return
+            if path=='/api/runs/stats':
+                self.respond(200,app.run_stats(p))
+                return
+            if path=='/api/settings':
+                require(p,'admin')
+                with app.store.lock:
+                    demo=any(m.get('provider')=='demo' for m in app.list(p,'models'))
+                self.respond(200,{'version':'0.1.0','maturity':'evaluation release','tenant':p['tenant'],
+                                  'provider_hosts':sorted(app.providers.allowed_hosts),
+                                  'transport':'direct TLS' if getattr(self.server,'direct_tls',False) else ('TLS proxy' if self.server.secure else 'loopback HTTP'),
+                                  'demo_models':demo,'worker':'running' if getattr(app,'worker_thread',None) and app.worker_thread.is_alive() else 'stopped',
+                                  'policy':app.policy(p),'budget':app.usage_series(p,1)['budget'],
+                                  'limits':{'chat_timeout_seconds':45,'body_bytes':1024*1024,'max_messages':100,'max_output_tokens':8192,'concurrent_calls_per_user':4}})
+                return
+            if path=='/api/password' and method=='POST':
+                app.auth.change_password(p,body.get('current',''),body.get('new',''),token)
+                self.respond(200,{'ok':True})
+                return
+            if path=='/api/chat/stream' and method=='POST':
+                self.sse(app.open_stream(p,body))
                 return
             if path=='/api/tools':
                 self.respond(200,{'tools':TOOLS})
                 return
             if path=='/api/tokens' and method=='POST':
-                self.respond(201,app.auth.issue(p,body.get('role','viewer'),body.get('lifetime',3600)))
+                self.respond(201,app.auth.issue(p,body.get('role','viewer'),body.get('lifetime',3600),body.get('label','')))
+                return
+            if path=='/api/tokens' and method=='GET':
+                self.respond(200,{'tokens':app.auth.list_tokens(p)})
+                return
+            if path.startswith('/api/tokens/') and method=='DELETE':
+                app.auth.revoke_token(p,path.rsplit('/',1)[1])
+                self.respond(200,{'ok':True})
+                return
+            if path.startswith('/api/users/'):
+                username=path.split('/',3)[3]
+                if method=='POST':
+                    app.auth.set_role(p,username,body.get('role'))
+                    self.respond(200,{'username':username,'role':body.get('role')})
+                elif method=='DELETE':
+                    app.auth.remove_user(p,username)
+                    self.respond(200,{'ok':True})
+                else:
+                    raise Fault('Method not allowed',405)
                 return
             if path=='/api/users':
                 require(p,'admin')
@@ -326,7 +408,9 @@ def main():
     app.recover()
     worker=threading.Thread(target=app.worker,daemon=True)
     worker.start()
+    app.worker_thread=worker
     server=Server((args.host,args.port),app,bool(args.tls_cert or os.getenv('NUVORA_BEHIND_TLS_PROXY')=='1'))
+    server.direct_tls=bool(args.tls_cert)
     if args.tls_cert:
         context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.minimum_version=ssl.TLSVersion.TLSv1_2

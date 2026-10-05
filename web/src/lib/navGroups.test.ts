@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { navGroups, pages, readPage } from './navGroups';
+import { navGroups, pages, readFocus, readPage } from './navGroups';
 
 describe('navigation', () => {
   it('reaches every routable page with a label and blurb', () => {
@@ -18,5 +18,10 @@ describe('navigation', () => {
     expect(readPage('#jobs')).toBe('jobs');
     expect(readPage('#nope')).toBe('overview');
     expect(readPage('')).toBe('overview');
+  });
+  it('reads a resource deep link', () => {
+    expect(readPage('#agents/abc')).toBe('agents');
+    expect(readFocus('#agents/abc')).toBe('abc');
+    expect(readFocus('#agents')).toBeUndefined();
   });
 });
