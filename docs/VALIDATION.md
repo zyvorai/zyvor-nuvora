@@ -16,14 +16,15 @@ Boundary tests cover tenant isolation, roles, CSRF, origins, provider allowlists
 
 Provider network tests ran against a local HTTP stub for OpenAI-compatible completion and live streaming, Ollama mapping and embeddings, LLM rerank and LLM-judge cases. SSO ran against a fake identity provider: discovery, PKCE, a signed ID token, the JWKS, and bearer tokens. Netra, Zyntra and Keep ran against stub servers. Action execution was checked with a deterministic substitute, including proving no outbound write occurs before approval. These tests do not measure real model quality or external-system correctness.
 
-- k3s deployment to a single-node lab host with `./scripts/deploy-remote.sh HOST USER`:
+- k3s deployment of 0.2.0 to a single-node lab host with `./scripts/deploy-remote.sh HOST USER`, using a generated administrator password:
   - podman build on the host, image import, Helm install
   - HTTPS NodePort 30789 with a persistent self-signed certificate
   - the PVC bound on `local-path`
   - `/healthz` reachable externally, and a wrong login refused with 401
-- The Playwright browser smoke against that deployment: **63 checks passed**.
+- The Playwright browser smoke against the 0.2.0 deployment: **70 checks passed** (71 locally, where the extra check covers the SSO button against a fake identity provider).
   - Covers sign-in errors, the mega menu, all 19 pages, and the evaluate-to-runs flow.
   - Covers a two-turn streamed playground conversation, the command palette, the workflow drawer, history and builder, and API key create and revoke.
+  - Covers document upload, retrieval and delete, pasted text, the evaluation case editor with an LLM judge, per-case results, and the Integrations card.
   - Covers evidence-chain verification, dark mode persisting across a reload, no horizontal overflow at 390px, and logout through the account menu.
   - The screenshots in `docs/ux/` are from this run.
 - `helm lint`, `helm template`, `shellcheck`, and `scripts/ci-deploy-guards.sh` (32 checks) passed.
