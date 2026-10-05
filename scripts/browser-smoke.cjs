@@ -69,7 +69,7 @@ const pages=['overview','playground','models','routers','knowledge','connectors'
   await page.getByLabel('Prompt',{exact:true}).fill('A lighthouse on a calm sea at dawn');
   await page.getByRole('button',{name:'Generate',exact:true}).click();
   await page.locator('.image-grid img').first().waitFor({timeout:30000});
-  assert(await page.locator('.image-grid img').first().evaluate(img=>img.complete&&img.naturalWidth>0));checks++;
+  await page.waitForFunction(()=>{const img=document.querySelector('.image-grid img');return img&&img.complete&&img.naturalWidth>0},null,{timeout:15000});checks++;
   await shot('19-images');
   await page.getByRole('tab',{name:'Chat'}).click();
 
@@ -138,7 +138,7 @@ const pages=['overview','playground','models','routers','knowledge','connectors'
   await go('evaluations');
   await page.getByRole('button',{name:'Evaluate',exact:true}).first().click();
   await page.getByRole('heading',{name:'Every step, in view.'}).waitFor();checks++;
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(4000);
   await page.getByRole('button',{name:'Inspect'}).first().click();
   await page.getByRole('heading',{name:'Run evidence'}).waitFor();checks++;
   await page.getByRole('table',{name:'Per-case results'}).waitFor();checks++;

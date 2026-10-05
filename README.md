@@ -125,6 +125,8 @@ Environment variables include `NUVORA_NODE_PORT`, `NUVORA_PROVIDER_HOSTS`, and `
 | **Builder.** Add, wire and reorder steps visually, or edit the JSON. | **Usage.** Requests, tokens, cost and latency over time, against the budget. |
 | ![Evidence](docs/ux/09-evidence.png) | ![Dark mode](docs/ux/11-overview-dark.png) |
 | **Evidence.** A verifiable hash chain. | **Dark mode.** One click, remembered on this device. |
+| ![Images](docs/ux/19-images.png) | ![Guardrails](docs/ux/08-guardrails.png) |
+| **Images.** Generate from the Playground; every image is metered and expires. | **Guardrails.** Filters, PII masking, grounding and a classifier, tested before you save. |
 
 ![Approvals: agents propose, people decide](docs/ux/readme-approvals.jpg)
 
