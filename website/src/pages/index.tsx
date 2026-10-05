@@ -18,17 +18,14 @@ function HomepageHeader() {
         <div className={styles.heroGrid}>
           <div>
             <Heading as="h1" className="hero__title">
-              Your models.
+              Private AI
               <br />
-              Your knowledge.
-              <br />
-              Your control.
+              that shows its work.
             </Heading>
             <p className="hero__subtitle">
-              A self-hosted AI application platform. Connect your own model
-              endpoints, ground every answer in cited evidence, run
-              tool-using agents, and keep each consequential action behind a
-              different human's approval.
+              Self-hosted AI apps on your own models. Answers cite their
+              sources, agents ask before they act, and every step lands in a
+              verifiable audit chain.
             </p>
             <div className={styles.buttons}>
               <Link
@@ -159,7 +156,7 @@ function DeployCTA() {
 export default function Home(): ReactNode {
   return (
     <Layout
-      title="Nuvora: your models, your knowledge, your control"
+      title="Nuvora: private AI that shows its work"
       description="A self-hosted AI application platform: your own model endpoints, cited retrieval, tool-using agents, separate-human approvals, and hash-chained evidence.">
       <HomepageHeader />
       <main>

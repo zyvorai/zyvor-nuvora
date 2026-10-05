@@ -5,72 +5,55 @@
 <title>Nuvora hero card</title>
 <!--
   1200x630 hero card. Dark by default (README hero); ?light renders the light variant
-  used as the GitHub social preview. The console is the real deployed screenshot
-  from docs/ux. Build: ./docs/social/build.sh
+  used as the GitHub social preview. Build: ./docs/social/build.sh
 -->
+<link rel="stylesheet" href="story.css">
 <style>
-  :root { --blue:#0071e3; --signal:#2997ff; --cyan:#64d2ff; --violet:#bf5af2; --green:#30d158; --orange:#ff5a15;
+  :root { --blue:#0071e3; --signal:#2997ff; --cyan:#64d2ff; --violet:#bf5af2; --green:#30d158; --amber:#ff9f0a;
     --bg:#000; --ink:#f5f5f7; --soft:#a1a1a6; --faint:#6e6e73; --line:rgba(255,255,255,.14); --glass:rgba(29,29,31,.72);
     --sans:-apple-system,'SF Pro Display','Helvetica Neue',Helvetica,Arial,sans-serif; --mono:'SF Mono',Menlo,Consolas,monospace; }
-  body.light { --bg:#fbfbfd; --ink:#1d1d1f; --soft:#515154; --faint:#86868b; --line:rgba(0,0,0,.1); --glass:rgba(255,255,255,.8); }
+  body.light { --bg:#fbfbfd; --ink:#1d1d1f; --soft:#515154; --faint:#86868b; --line:rgba(0,0,0,.1); --glass:rgba(255,255,255,.8); --violet:#8a3fb5; }
   * { box-sizing:border-box; }
   html,body { margin:0; padding:0; }
   body { width:1200px; height:630px; overflow:hidden; background:var(--bg); color:var(--ink); font-family:var(--sans); position:relative; }
 
   .aurora { position:absolute; inset:0; pointer-events:none;
     background:
-      radial-gradient(560px 380px at 80% 46%, rgba(0,113,227,.34), transparent 66%),
-      radial-gradient(420px 320px at 96% 96%, rgba(191,90,242,.26), transparent 62%),
-      radial-gradient(520px 400px at -4% 108%, rgba(0,113,227,.22), transparent 62%); }
+      radial-gradient(520px 420px at 78% 40%, rgba(0,113,227,.30), transparent 66%),
+      radial-gradient(420px 320px at 100% 100%, rgba(191,90,242,.24), transparent 62%),
+      radial-gradient(420px 320px at 70% 100%, rgba(48,209,88,.12), transparent 62%),
+      radial-gradient(520px 400px at -4% 108%, rgba(0,113,227,.2), transparent 62%); }
   body.light .aurora { background:
-      radial-gradient(560px 380px at 80% 46%, rgba(0,113,227,.16), transparent 66%),
-      radial-gradient(420px 320px at 96% 96%, rgba(191,90,242,.12), transparent 62%),
-      radial-gradient(520px 400px at -4% 108%, rgba(0,113,227,.1), transparent 62%); }
-  .grid { position:absolute; inset:0; pointer-events:none; opacity:.5;
+      radial-gradient(520px 420px at 78% 40%, rgba(0,113,227,.13), transparent 66%),
+      radial-gradient(420px 320px at 100% 100%, rgba(191,90,242,.1), transparent 62%),
+      radial-gradient(520px 400px at -4% 108%, rgba(0,113,227,.08), transparent 62%); }
+  .grid { position:absolute; inset:0; pointer-events:none; opacity:.45;
     background-image:linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
     background-size:40px 40px;
-    -webkit-mask-image:radial-gradient(520px 360px at 78% 50%, #000 0%, transparent 75%); }
+    -webkit-mask-image:radial-gradient(520px 380px at 76% 50%, #000 0%, transparent 75%); }
 
-  .left { position:absolute; left:60px; top:54px; width:500px; z-index:5; }
+  .left { position:absolute; left:60px; top:52px; width:500px; z-index:5; }
   .brand { display:flex; align-items:center; gap:12px; font-family:var(--mono); font-size:13.5px; letter-spacing:.18em; text-transform:uppercase; color:var(--soft); }
   .brand img { width:30px; height:30px; }
   .brand b { color:var(--ink); }
-  .word { margin:22px 0 0; font-size:104px; line-height:.95; font-weight:800; letter-spacing:-.05em; padding-bottom:8px;
-    background:linear-gradient(95deg,var(--ink) 0%,#dbe9ff 34%,var(--signal) 66%,var(--violet) 100%); -webkit-background-clip:text; background-clip:text; color:transparent; }
-  body.light .word { background:linear-gradient(95deg,#1d1d1f 0%,#1d1d1f 30%,var(--blue) 66%,#8a3fb5 100%); -webkit-background-clip:text; background-clip:text; }
-  .tag { margin:10px 0 0; font-size:30px; line-height:1.18; font-weight:700; letter-spacing:-.02em; }
-  .tag em { font-style:normal; background:linear-gradient(90deg,var(--signal),var(--cyan)); -webkit-background-clip:text; background-clip:text; color:transparent; }
-  body.light .tag em { background:linear-gradient(90deg,var(--blue),#0a6b99); -webkit-background-clip:text; background-clip:text; }
-  .lede { margin:14px 0 0; font-size:17.5px; line-height:1.45; color:var(--soft); width:470px; }
-  .stats { margin-top:26px; display:flex; gap:30px; }
-  .stat b { display:block; font-size:32px; font-weight:800; letter-spacing:-.03em; color:var(--ink); }
-  .stat span { font-family:var(--mono); font-size:11.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--faint); }
-  .pills { position:absolute; left:60px; bottom:42px; display:flex; gap:10px; z-index:5; }
+  h1 { margin:34px 0 0; font-size:70px; line-height:1; font-weight:800; letter-spacing:-.045em; }
+  h1 em { font-style:normal; background:linear-gradient(95deg,var(--signal) 0%,var(--cyan) 45%,var(--violet) 100%); -webkit-background-clip:text; background-clip:text; color:transparent; padding-right:4px; }
+  body.light h1 em { background:linear-gradient(95deg,var(--blue) 0%,#0a84b8 45%,#8a3fb5 100%); -webkit-background-clip:text; background-clip:text; }
+  .lede { margin:24px 0 0; font-size:19px; line-height:1.45; color:var(--soft); width:470px; }
+  .lede b { color:var(--ink); font-weight:650; }
+  .pills { position:absolute; left:60px; bottom:44px; display:flex; gap:10px; white-space:nowrap; z-index:5; }
   .pills span { font-family:var(--mono); font-size:13px; font-weight:700; padding:7px 13px; border-radius:18px; border:1.5px solid var(--line); color:var(--ink); background:var(--glass); }
   .pills span.b { background:var(--blue); border-color:var(--blue); color:#fff; box-shadow:0 0 24px rgba(0,113,227,.5); }
 
-  .stage { position:absolute; left:610px; top:70px; width:640px; height:500px; perspective:1600px; z-index:3; }
-  .device { position:absolute; left:20px; top:30px; width:620px; border-radius:16px; overflow:hidden;
-    border:1px solid rgba(255,255,255,.18); background:#000;
-    transform:rotateY(-16deg) rotateX(6deg) rotateZ(1deg); transform-origin:left center;
-    box-shadow:0 40px 120px rgba(0,113,227,.45), 0 10px 40px rgba(0,0,0,.6); }
-  body.light .device { border-color:rgba(0,0,0,.08); box-shadow:0 40px 120px rgba(0,113,227,.22), 0 10px 40px rgba(0,0,0,.14); }
-  .device .bar { height:26px; display:flex; align-items:center; gap:7px; padding:0 12px; background:#1d1d1f; }
-  body.light .device .bar { background:#f5f5f7; }
-  .device .bar i { width:10px; height:10px; border-radius:50%; background:#3a3a3d; }
-  .device .bar i:nth-child(1) { background:#ff5f57; } .device .bar i:nth-child(2) { background:#febc2e; } .device .bar i:nth-child(3) { background:#28c840; }
-  .device .bar span { margin-left:12px; font-family:var(--mono); font-size:10.5px; color:#86868b; }
-  .device img { display:block; width:100%; }
-
-  .chip { position:absolute; z-index:6; display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:14px;
-    background:var(--glass); border:1px solid var(--line); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
-    font-size:13.5px; font-weight:600; color:var(--ink); box-shadow:0 12px 36px rgba(0,0,0,.35); }
-  body.light .chip { box-shadow:0 12px 36px rgba(0,0,0,.12); }
-  .chip small { display:block; font-family:var(--mono); font-size:10.5px; font-weight:500; color:var(--faint); letter-spacing:.04em; }
-  .chip .dot { width:9px; height:9px; border-radius:50%; flex:0 0 auto; }
-  .c1 { left:560px; top:176px; } .c1 .dot { background:var(--green); box-shadow:0 0 12px var(--green); }
-  .c2 { left:1010px; top:470px; } .c2 .dot { background:#ff9f0a; box-shadow:0 0 12px #ff9f0a; }
-  .c3 { left:600px; top:470px; } .c3 .dot { background:var(--signal); box-shadow:0 0 12px var(--signal); }
+  .story { position:absolute; left:610px; top:46px; width:546px; z-index:4; }
+  .rail { position:absolute; left:15px; top:30px; bottom:30px; width:2px;
+    background:linear-gradient(var(--signal),var(--cyan) 25%,var(--violet) 50%,var(--amber) 75%,var(--green)); opacity:.7; }
+  .row { position:relative; display:flex; align-items:center; gap:16px; margin-bottom:12px; }
+  .node { position:relative; z-index:1; width:32px; height:32px; flex:0 0 auto; border-radius:50%; display:grid; place-items:center;
+    font-family:var(--mono); font-size:12px; font-weight:800; color:var(--c); background:var(--bg); border:2px solid var(--c); box-shadow:0 0 16px color-mix(in srgb, var(--c) 60%, transparent); }
+  .stage-card { flex:1; height:94px; padding:12px 16px 12px 20px; display:flex; flex-direction:column; justify-content:space-between; }
+  .line { display:flex; align-items:center; gap:8px; min-width:0; }
+  .line.end { justify-content:space-between; }
 </style>
 </head>
 <body>
@@ -78,36 +61,57 @@
 <div class="grid"></div>
 
 <div class="left">
-  <div class="brand"><img src="../../web/public/zyvor-mark.svg" alt=""><span><b>Zyvor</b> · Private AI platform</span></div>
-  <div class="word">Nuvora</div>
-  <div class="tag">Your models. Your knowledge.<br><em>Your control.</em></div>
-  <div class="lede">Connect your own model endpoints, ground every answer in cited evidence, run tool-using agents, and keep each consequential action behind a different human’s approval.</div>
-  <div class="stats">
-    <div class="stat"><b>17</b><span>console views</span></div>
-    <div class="stat"><b>4</b><span>model adapters</span></div>
-    <div class="stat"><b>0</b><span>runtime deps</span></div>
-  </div>
+  <div class="brand"><img src="../../web/public/zyvor-mark.svg" alt=""><span><b>Zyvor</b> · Nuvora</span></div>
+  <h1>Private AI<br>that shows<br><em>its work.</em></h1>
+  <div class="lede">Self-hosted AI apps on <b>your own models</b>. Answers cite their sources, agents ask before they act, and every step lands in a <b>verifiable audit chain</b>.</div>
 </div>
 
-<div class="stage">
-  <div class="device">
-    <div class="bar"><i></i><i></i><i></i><span>https://nuvora.local · Workspace overview</span></div>
-    <img id="shot" src="../ux/11-overview-dark.png" alt="">
+<div class="story">
+  <div class="rail"></div>
+
+  <div class="row s-ask"><div class="node">1</div>
+    <div class="stage-card">
+      <div class="line end"><span class="label">Ask</span><span class="meta">Playground · your model</span></div>
+      <div class="line" style="justify-content:flex-end"><span class="bubble">Which customers did the Frankfurt outage hit?</span></div>
+    </div>
+  </div>
+
+  <div class="row s-ground"><div class="node">2</div>
+    <div class="stage-card">
+      <div class="line end"><span class="label">Ground</span><span class="meta">BM25 + vector · 3 passages</span></div>
+      <div class="answer">Three accounts in eu-central, all on the Pro plan.</div>
+      <div class="line"><span class="cite"><b>1</b> incident-2291.md</span><span class="cite"><b>2</b> status-page.md</span><span class="meta">sha256 6803c3…</span></div>
+    </div>
+  </div>
+
+  <div class="row s-act"><div class="node">3</div>
+    <div class="stage-card">
+      <div class="line end"><span class="label">Act</span><span class="badge s-approve">Waiting for approval</span></div>
+      <div class="line"><span class="code"><i>POST</i> create_ticket {priority: "P1", accounts: 3}</span></div>
+    </div>
+  </div>
+
+  <div class="row s-approve"><div class="node">4</div>
+    <div class="stage-card">
+      <div class="line end"><span class="label">Approve</span><span class="meta">fingerprint 9f2c…e41</span></div>
+      <div class="line"><span class="avatar">PR</span><span class="who">Priya approved</span><span class="meta">proposed by sam · approver ≠ author</span></div>
+    </div>
+  </div>
+
+  <div class="row s-prove"><div class="node">5</div>
+    <div class="stage-card">
+      <div class="line end"><span class="label">Prove</span>
+        <span class="verified"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".18"/><path d="M4.6 8.2l2.2 2.2 4.6-4.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Chain verified</span></div>
+      <div class="chain"><span class="block">#1042 ask</span><span class="link">→</span><span class="block">#1043 answer</span><span class="link">→</span><span class="block">#1044 approved</span><span class="link">→</span><span class="block tip">#1045 executed</span></div>
+    </div>
   </div>
 </div>
-
-<div class="chip c1"><span class="dot"></span><div>Audit chain verified<small>sha256 · tenant default</small></div></div>
-<div class="chip c3"><span class="dot"></span><div>3 cited passages<small>BM25 + vector fusion</small></div></div>
-<div class="chip c2"><span class="dot"></span><div>1 decision waiting<small>approver ≠ author</small></div></div>
 
 <div class="pills">
-  <span class="b">Zyvor Production License</span><span>Python stdlib + React</span><span>k3s · Helm · HTTPS</span>
+  <span class="b">Self-hosted</span><span>OpenAI · vLLM · Ollama · Bedrock</span><span>k3s · Helm</span>
 </div>
 <script>
-  if (location.search.includes('light')) {
-    document.body.classList.add('light');
-    document.getElementById('shot').src = '../ux/01-overview.png';
-  }
+  if (location.search.includes('light')) document.body.classList.add('light');
 </script>
 </body>
 </html>

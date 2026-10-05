@@ -1,0 +1,32 @@
+/* The five-stage story (ask, ground, act, approve, prove) shared by the hero and launch cards. */
+.story { --card:rgba(29,29,31,.78); --chip:rgba(255,255,255,.07); }
+body.light .story { --card:rgba(255,255,255,.86); --chip:rgba(0,0,0,.05); }
+
+.stage-card { position:relative; border-radius:16px; background:var(--card); border:1px solid var(--line);
+  backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); box-shadow:0 14px 40px rgba(0,0,0,.35); }
+body.light .stage-card { box-shadow:0 14px 40px rgba(0,30,80,.1); }
+.stage-card::before { content:""; position:absolute; left:0; top:14px; bottom:14px; width:3px; border-radius:3px; background:var(--c); box-shadow:0 0 14px var(--c); }
+.label { font-family:var(--mono); font-size:11px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--c); }
+.s-ask { --c:var(--signal); } .s-ground { --c:var(--cyan); } .s-act { --c:var(--violet); } .s-approve { --c:var(--amber); } .s-prove { --c:var(--green); }
+body.light .s-ground { --c:#0a84b8; } body.light .s-approve { --c:#c76a00; } body.light .s-prove { --c:#1f9d47; }
+
+.bubble { display:inline-block; padding:8px 13px; border-radius:15px 15px 4px 15px; background:var(--blue); color:#fff; font-size:14px; font-weight:600; line-height:1.3; }
+.answer { font-size:13.5px; line-height:1.4; color:var(--ink); }
+.cite { display:inline-flex; align-items:center; gap:5px; padding:2px 8px; border-radius:9px; background:var(--chip); border:1px solid var(--line);
+  font-family:var(--mono); font-size:10.5px; color:var(--soft); white-space:nowrap; }
+.cite b { color:var(--c); }
+.code { font-family:var(--mono); font-size:12px; color:var(--ink); padding:6px 9px; border-radius:8px; background:var(--chip); border:1px solid var(--line); white-space:nowrap; }
+.code i { font-style:normal; color:var(--violet); font-weight:700; }
+.badge { display:inline-flex; align-items:center; gap:6px; padding:3px 9px; border-radius:10px; font-size:11px; font-weight:700; white-space:nowrap;
+  color:var(--c); background:color-mix(in srgb, var(--c) 16%, transparent); }
+.badge::before { content:""; width:6px; height:6px; border-radius:50%; background:currentColor; box-shadow:0 0 8px currentColor; }
+.avatar { width:26px; height:26px; border-radius:50%; flex:0 0 auto; display:grid; place-items:center; font-size:10.5px; font-weight:800; color:#fff;
+  background:linear-gradient(135deg,#ff9f0a,#ff5a15); }
+.who { font-size:13.5px; font-weight:700; color:var(--ink); }
+.meta { font-family:var(--mono); font-size:10.5px; color:var(--faint); white-space:nowrap; }
+.chain { display:flex; align-items:center; gap:6px; }
+.block { font-family:var(--mono); font-size:10.5px; padding:5px 8px; border-radius:7px; border:1px solid var(--line); background:var(--chip); color:var(--soft); white-space:nowrap; }
+.block.tip { color:var(--c); border-color:color-mix(in srgb, var(--c) 55%, transparent); }
+.link { color:var(--faint); font-size:12px; }
+.verified { display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:700; color:var(--c); white-space:nowrap; }
+.verified svg { width:16px; height:16px; }

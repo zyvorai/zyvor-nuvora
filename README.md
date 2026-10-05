@@ -9,13 +9,13 @@
 [![React](https://img.shields.io/badge/React-console-61DAFB?logo=react&logoColor=black)](web)
 [![Docs](https://img.shields.io/badge/Docs-zyvorai.github.io%2Fzyvor--nuvora-0071e3)](https://zyvorai.github.io/zyvor-nuvora/)
 
-![Nuvora — your models, your knowledge, your control](docs/social/nuvora-hero-dark.jpg)
+![Nuvora: private AI that shows its work. Ask, ground, act, approve, prove.](docs/social/nuvora-hero-dark.jpg)
 
-### Your models. Your knowledge. Your control.
+### Private AI that shows its work.
 
 **A self-hosted AI application platform.** Connect your own model endpoints, ground every answer in cited evidence, run tool-using agents and reviewed workflows, and keep each consequential action behind a different human's approval.
 
-**17 console views** · **4 model adapters** · **Tenant-scoped** · **Author ≠ approver** · **Hash-chained evidence** · **Zero runtime Python deps**
+**19 console views** · **4 model adapters** · **Tenant-scoped** · **Author ≠ approver** · **Hash-chained evidence** · **Zero runtime Python deps**
 
 📖 **[Read the full docs](https://zyvorai.github.io/zyvor-nuvora/)**: quickstart, concepts, security model, and a product tour.
 

@@ -6,7 +6,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
   title: 'Nuvora',
-  tagline: 'Your models. Your knowledge. Your control.',
+  tagline: 'Private AI that shows its work.',
   favicon: 'img/favicon.svg',
 
   future: {
