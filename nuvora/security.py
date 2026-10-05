@@ -215,17 +215,134 @@ def require(p, *roles):
         raise Fault('This role cannot perform that action',403)
 
 
-def guard(text, policy):
-    reasons=[]
-    transformed=text
-    for topic in policy.get('blocked_topics',[]):
-        if topic.lower() in text.lower():
-            reasons.append('Denied topic: '+topic)
-    if policy.get('detect_injection',True) and re.search(r'ignore\s+(all\s+)?(previous|prior|system)\s+(instructions|prompts)|reveal\s+(the\s+)?system\s+prompt',text,re.I):
+PII_ACTIONS = ('mask', 'block')
+CLASSIFIER_CATEGORIES = ('hate', 'violence', 'sexual', 'self_harm', 'misconduct', 'prompt_attack')
+GROUNDING_STOP = frozenset('the a an and or of to in on for with is are was were be been it this that as at by from not no but if then than so do does did can could will would should may might must have has had their there they them its into over under about'.split())
+
+
+def _luhn(digits):
+    total = 0
+    for i, ch in enumerate(reversed(digits)):
+        n = int(ch)
+        if i % 2:
+            n = n * 2 - 9 if n > 4 else n * 2
+        total += n
+    return total % 10 == 0
+
+
+def _iban(value):
+    raw = value.replace(' ', '').upper()
+    if not 15 <= len(raw) <= 34:
+        return False
+    moved = raw[4:] + raw[:4]
+    return int(''.join(str(int(c, 36)) for c in moved)) % 97 == 1
+
+
+def _ipv4(value):
+    try:
+        ipaddress.IPv4Address(value)
+        return True
+    except ValueError:
+        return False
+
+
+PII = {
+    'email': (r'\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b', None, '[EMAIL]'),
+    'iban': (r'\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?\b', _iban, '[IBAN]'),
+    'card': (r'\b\d(?:[ -]?\d){12,18}\b', lambda m: _luhn(re.sub(r'\D', '', m)), '[CARD]'),
+    'ssn': (r'\b\d{3}-\d{2}-\d{4}\b', None, '[SSN]'),
+    'ipv4': (r'\b(?:\d{1,3}\.){3}\d{1,3}\b', _ipv4, '[IP]'),
+    'phone': (r'(?<![\w+])(?<!\d[ .-])(?:\+\d{1,3}[ .-]?)?(?:\(\d{2,4}\)|\d{2,4})[ .-]\d{3,4}[ .-]\d{3,4}(?![\w-])(?![ .-]?\d)', None, '[PHONE]'),
+}
+
+
+def grounding_score(text, sources):
+    """Mean share of each answer sentence's content words that appear in the sources (0–1)."""
+    vocab = set(re.findall(r'[a-z0-9]+', ' '.join(sources).lower())) - GROUNDING_STOP
+    scores = []
+    for sentence in re.split(r'(?<=[.!?])\s+|\n+', text):
+        words = [w for w in re.findall(r'[a-z0-9]+', sentence.lower()) if w not in GROUNDING_STOP and len(w) > 2]
+        if len(words) >= 4:
+            scores.append(sum(w in vocab for w in words) / len(words))
+    return round(sum(scores) / len(scores), 3) if scores else 1.0
+
+
+def validate_policy(data):
+    words = data.get('word_filters', [])
+    if not isinstance(words, list) or len(words) > 200 or any(not isinstance(w, str) or not 1 <= len(w) <= 100 for w in words):
+        raise Fault('word_filters must be up to 200 strings of 1–100 characters')
+    filters = data.get('regex_filters', [])
+    if not isinstance(filters, list) or len(filters) > 20:
+        raise Fault('regex_filters allows up to 20 entries')
+    for f in filters:
+        if not isinstance(f, dict) or set(f) - {'name', 'pattern', 'action'} or not isinstance(f.get('name'), str) or not isinstance(f.get('pattern'), str) \
+                or not 1 <= len(f['pattern']) <= 200 or f.get('action', 'block') not in PII_ACTIONS:
+            raise Fault('Each regex filter needs a name, a pattern of 1–200 characters and action mask or block')
+        if re.search(r'\([^)]*[+*][^)]*\)[+*{]', f['pattern']):
+            raise Fault('Nested quantifiers are not allowed in regex filters')
+        try:
+            re.compile(f['pattern'])
+        except re.error as exc:
+            raise Fault('Invalid regex filter: ' + f['name']) from exc
+    entities = data.get('pii_entities')
+    if entities is not None and (not isinstance(entities, dict) or set(entities) - set(PII) or any(v not in PII_ACTIONS for v in entities.values())):
+        raise Fault('pii_entities maps ' + ', '.join(PII) + ' to mask or block')
+    threshold = data.get('grounding_threshold')
+    if threshold is not None and (not isinstance(threshold, (int, float)) or not 0 <= threshold <= 1):
+        raise Fault('grounding_threshold must be between 0 and 1')
+    categories = data.get('classifier_categories', [])
+    if not isinstance(categories, list) or set(categories) - set(CLASSIFIER_CATEGORIES):
+        raise Fault('classifier_categories must be among ' + ', '.join(CLASSIFIER_CATEGORIES))
+    ct = data.get('classifier_threshold', .5)
+    if not isinstance(ct, (int, float)) or not 0 < ct <= 1:
+        raise Fault('classifier_threshold must be above 0 and at most 1')
+
+
+def guard(text, policy, sources=None):
+    reasons = []
+    transformed = text
+    lower = text.lower()
+    for topic in policy.get('blocked_topics', []):
+        if topic.lower() in lower:
+            reasons.append('Denied topic: ' + topic)
+    for word in policy.get('word_filters', []):
+        if re.search(r'(?<!\w)' + re.escape(word.lower()) + r'(?!\w)', lower):
+            reasons.append('Blocked word: ' + word)
+    if policy.get('detect_injection', True) and re.search(r'ignore\s+(all\s+)?(previous|prior|system)\s+(instructions|prompts)|reveal\s+(the\s+)?system\s+prompt', text, re.I):
         reasons.append('Instruction override pattern detected')
-    if policy.get('redact_pii',True):
-        transformed=re.sub(r'\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b','[EMAIL]',transformed)
-        transformed=re.sub(r'\b(?:\d[ -]?){13,19}\b','[ACCOUNT]',transformed)
-    if len(text)>policy.get('max_chars',100000):
+    for f in policy.get('regex_filters', []):
+        if re.search(f['pattern'], transformed):
+            if f.get('action', 'block') == 'block':
+                reasons.append('Matched filter: ' + f['name'])
+            else:
+                transformed = re.sub(f['pattern'], '[' + f['name'].upper() + ']', transformed)
+    entities = policy.get('pii_entities')
+    found = []
+    if entities is None:
+        if policy.get('redact_pii', True):
+            transformed = re.sub(PII['email'][0], '[EMAIL]', transformed)
+            transformed = re.sub(r'\b(?:\d[ -]?){13,19}\b', '[ACCOUNT]', transformed)
+    else:
+        for name in [n for n in PII if n in entities]:
+            action = entities[name]
+            pattern, check, label = PII[name]
+            hits = [m for m in re.findall(pattern, transformed) if check is None or check(m)]
+            if not hits:
+                continue
+            found.append(name)
+            if action == 'block':
+                reasons.append('Sensitive information: ' + name)
+            else:
+                transformed = re.sub(pattern, lambda m: label if check is None or check(m.group(0)) else m.group(0), transformed)
+    if len(text) > policy.get('max_chars', 100000):
         reasons.append('Content size exceeds policy')
-    return {'allowed':not reasons,'text':transformed,'reasons':reasons,'pii_redacted':transformed!=text,'engine':'deterministic rules; not a classifier or formal proof'}
+    verdict = {'allowed': not reasons, 'text': transformed, 'reasons': reasons, 'pii_redacted': transformed != text, 'pii_found': found,
+               'engine': 'deterministic rules; not a classifier or formal proof'}
+    threshold = policy.get('grounding_threshold')
+    if sources and threshold:
+        score = grounding_score(text, sources)
+        verdict['grounding'] = {'score': score, 'threshold': threshold, 'grounded': score >= threshold}
+        if score < threshold:
+            verdict['reasons'].append(f'Answer not grounded in sources (score {score})')
+            verdict['allowed'] = False
+    return verdict

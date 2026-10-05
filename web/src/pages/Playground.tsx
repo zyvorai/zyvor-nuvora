@@ -164,11 +164,12 @@ export default function Playground({
       turns: [...prior, { role: 'user', content: question, citations }, { role: 'assistant', answers: targets.map((model) => ({ model, content: '', streaming: true })) }],
     }));
     setFocusCitation(null);
-    await Promise.all(targets.map((model, slot) => answer(conv.id, turnIndex, slot, model, messages)));
+    const sources = citations.slice(0, 20).map((c) => String(c.text));
+    await Promise.all(targets.map((model, slot) => answer(conv.id, turnIndex, slot, model, messages, sources)));
   }
 
-  async function answer(id: string, turn: number, slot: number, model: string, messages: Row[]) {
-    const body = { model, messages, temperature: settings.temperature, max_tokens: settings.max_tokens, cache: settings.cache };
+  async function answer(id: string, turn: number, slot: number, model: string, messages: Row[], sources: string[] = []) {
+    const body = { model, messages, temperature: settings.temperature, max_tokens: settings.max_tokens, cache: settings.cache, ...(sources.length ? { sources } : {}) };
     const controller = new AbortController();
     controllers.current.push(controller);
     try {
@@ -382,7 +383,7 @@ export default function Playground({
                         <span className="small muted">
                           {a.stopped
                             ? 'Stopped'
-                            : [a.meta?.cached ? 'Cache hit' : 'Fresh response', money(a.meta?.cost || 0), a.meta?.routing, a.meta?.latency_ms != null ? a.meta.latency_ms + ' ms' : '', a.meta?.usage ? `${(a.meta.usage.prompt_tokens || 0) + (a.meta.usage.completion_tokens || 0)} tokens` : '']
+                            : [a.meta?.cached ? 'Cache hit' : 'Fresh response', money(a.meta?.cost || 0), a.meta?.routing, a.meta?.latency_ms != null ? a.meta.latency_ms + ' ms' : '', a.meta?.usage ? `${(a.meta.usage.prompt_tokens || 0) + (a.meta.usage.completion_tokens || 0)} tokens` : '', a.meta?.grounding ? `Grounding ${a.meta.grounding.score}` : '']
                                 .filter(Boolean)
                                 .join(' · ')}
                         </span>

@@ -1215,3 +1215,12 @@ form.filters input { min-height: 36px; margin: 0; padding: 6px 10px; font-size: 
 .integration-list li { display: grid; grid-template-columns: auto 1fr auto auto; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--line, #e3e6ea); border-radius: 10px; }
 .integration-list li > div { display: grid; gap: 2px; min-width: 0; }
 .integration-list small { overflow-wrap: anywhere; }
+
+/* Guardrail policy editor */
+.policy-group { border: 1px solid var(--line, #e3e6ea); border-radius: 12px; padding: 12px 14px; margin: 0 0 14px; display: grid; gap: 10px; }
+.policy-group legend { font-size: 13px; font-weight: 600; padding: 0 6px; }
+.pii-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px 14px; }
+.pii-grid label { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }
+.filter-row { display: grid; grid-template-columns: 1fr 2fr auto auto; gap: 8px; align-items: center; }
+.guard-verdict { display: grid; gap: 6px; margin-top: 12px; }
+.guard-verdict ul { margin: 0; padding-left: 18px; }

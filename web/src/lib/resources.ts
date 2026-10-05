@@ -7,7 +7,7 @@ export const FIELDS: Record<string, string[]> = {
   knowledge: ['embedding_model', 'rerank_model'],
   agents: ['model', 'knowledge_ids', 'tools', 'max_steps', 'system_prompt'],
   prompts: ['template'],
-  policies: ['max_chars', 'daily_tokens', 'blocked_topics', 'redact_pii', 'detect_injection'],
+  policies: ['max_chars', 'daily_tokens', 'blocked_topics', 'redact_pii', 'detect_injection', 'word_filters', 'regex_filters', 'pii_entities', 'grounding_threshold', 'classifier_model', 'classifier_categories', 'classifier_threshold'],
   workflows: ['steps'],
   evaluations: ['model', 'cases', 'pass_threshold', 'judge_model', 'knowledge_ids'],
   recipes: ['model', 'method', 'dataset', 'rank', 'epochs'],

@@ -6,6 +6,7 @@ import type { Collections } from '../lib/types';
 import { Field } from './kit';
 import { WorkflowBuilder } from './WorkflowCanvas';
 import CaseEditor, { cleanCase, type EvalCase } from './CaseEditor';
+import PolicyFields from './PolicyFields';
 import { topoOrder, type Step } from '../lib/dag';
 
 const KEYS: Record<string, string[]> = {
@@ -14,7 +15,7 @@ const KEYS: Record<string, string[]> = {
   knowledge: ['embedding_model', 'rerank_model'],
   agents: ['model', 'system_prompt', 'knowledge_ids', 'tools', 'max_steps'],
   prompts: ['template'],
-  policies: ['redact_pii', 'detect_injection', 'max_chars', 'daily_tokens', 'blocked_topics'],
+  policies: ['redact_pii', 'detect_injection', 'max_chars', 'daily_tokens', 'blocked_topics', 'word_filters', 'regex_filters', 'pii_entities', 'grounding_threshold', 'classifier_model', 'classifier_categories', 'classifier_threshold'],
   recipes: ['model', 'method', 'dataset', 'rank', 'epochs'],
   evaluations: ['model', 'pass_threshold', 'judge_model', 'knowledge_ids'],
   workflows: [],
@@ -368,6 +369,7 @@ export default function CreateForm({
               }
             />
           </Field>
+          <PolicyFields data={data} set={set} chatModels={chatModels} />
         </>
       )}
       {kind === 'recipes' && (
