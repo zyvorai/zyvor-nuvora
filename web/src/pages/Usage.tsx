@@ -52,6 +52,7 @@ export default function Usage({ refresh }: { refresh: number }) {
     ['Tokens', (data?.tokens || 0).toLocaleString()],
     ['Recorded cost', money(data?.cost)],
     ['Cache hits', data?.cache_hits || 0],
+    ['Saved by caching', money(data?.saved)],
   ];
   const daysRows: Row[] = series?.days || [];
   const labels = daysRows.map((d) => new Date(d.date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }));
@@ -117,6 +118,9 @@ export default function Usage({ refresh }: { refresh: number }) {
               { label: 'Provider', value: Math.max(0, requests - hits), tone: 'blue' },
             ]}
           />
+          <p className="note">
+            {(data?.cached_tokens || 0).toLocaleString()} input tokens billed at the provider's cached rate. Saved {money(data?.saved)} in total.
+          </p>
         </Card>
         <Card title="Daily token budget">
           {budget ? (

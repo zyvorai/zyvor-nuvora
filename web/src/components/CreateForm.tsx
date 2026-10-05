@@ -11,11 +11,12 @@ import { topoOrder, type Step } from '../lib/dag';
 
 const KEYS: Record<string, string[]> = {
   actions: ['url', 'method', 'key_env', 'description'],
-  models: ['provider', 'base_url', 'upstream_model', 'key_env', 'region', 'input_price', 'output_price', 'capability', 'enabled'],
+  models: ['provider', 'base_url', 'upstream_model', 'key_env', 'region', 'input_price', 'output_price', 'cached_input_price', 'capability', 'enabled'],
+  routers: ['models', 'judge_model', 'min_score'],
   knowledge: ['embedding_model', 'rerank_model'],
   agents: ['model', 'system_prompt', 'knowledge_ids', 'tools', 'max_steps'],
   prompts: ['template'],
-  policies: ['redact_pii', 'detect_injection', 'max_chars', 'daily_tokens', 'blocked_topics', 'word_filters', 'regex_filters', 'pii_entities', 'grounding_threshold', 'classifier_model', 'classifier_categories', 'classifier_threshold'],
+  policies: ['redact_pii', 'detect_injection', 'max_chars', 'daily_tokens', 'blocked_topics', 'word_filters', 'regex_filters', 'pii_entities', 'grounding_threshold', 'classifier_model', 'classifier_categories', 'classifier_threshold', 'cache_ttl'],
   recipes: ['model', 'method', 'dataset', 'rank', 'epochs'],
   evaluations: ['model', 'pass_threshold', 'judge_model', 'knowledge_ids'],
   workflows: [],
@@ -248,11 +249,59 @@ export default function CreateForm({
           <div className="form-grid">
             {field('input_price', 'USD / million input tokens', 'number')}
             {field('output_price', 'USD / million output tokens', 'number')}
+            <Field label="USD / million cached input tokens (optional)">
+              <input
+                type="number"
+                step="any"
+                min={0}
+                value={data.cached_input_price ?? ''}
+                onChange={(e) => set('cached_input_price', e.target.value === '' ? null : Number(e.target.value))}
+              />
+            </Field>
           </div>
           <label className="check">
             <input type="checkbox" checked={!!data.enabled} onChange={(e) => set('enabled', e.target.checked)} />
             Enabled for routing
           </label>
+        </>
+      )}
+      {kind === 'routers' && (
+        <>
+          <fieldset className="policy-group">
+            <legend>Tiers, cheapest first (select in order)</legend>
+            <div className="check-list">
+              {chatModels.map((m) => {
+                const tiers: string[] = data.models || [];
+                const at = tiers.indexOf(m.id);
+                return (
+                  <label key={m.id}>
+                    <input
+                      type="checkbox"
+                      checked={at >= 0}
+                      onChange={(e) => set('models', e.target.checked ? [...tiers, m.id] : tiers.filter((x) => x !== m.id))}
+                    />
+                    {at >= 0 ? `${at + 1}. ` : ''}
+                    {m.name}
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+          <div className="form-grid">
+            <Field label="Judge model (optional)">
+              <select value={data.judge_model || ''} onChange={(e) => set('judge_model', e.target.value || null)}>
+                <option value="">Heuristics only · empty or hedged answers escalate</option>
+                {chatModels.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Escalate below judge score">
+              <input type="number" min={0} max={1} step={0.05} value={data.min_score ?? 0.7} onChange={(e) => set('min_score', Number(e.target.value))} />
+            </Field>
+          </div>
         </>
       )}
       {kind === 'knowledge' && (
@@ -368,6 +417,9 @@ export default function CreateForm({
                 )
               }
             />
+          </Field>
+          <Field label="Response cache lifetime (seconds)">
+            <input type="number" min={30} max={86400} value={data.cache_ttl ?? 300} onChange={(e) => set('cache_ttl', Number(e.target.value))} />
           </Field>
           <PolicyFields data={data} set={set} chatModels={chatModels} />
         </>

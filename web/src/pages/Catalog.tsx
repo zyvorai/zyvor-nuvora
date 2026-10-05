@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
-import { Cpu, FlaskConical, Plug } from 'lucide-react';
+import { Cpu, FlaskConical, Plug, Route } from 'lucide-react';
 import { api, download, money, type Row } from '../api';
 import ResourceTable from '../components/ResourceTable';
 import type { Act } from '../lib/types';
@@ -13,6 +13,19 @@ export function Models({ rows }: { rows: Row[] }) {
       emptyIcon={Cpu}
       emptyTitle="Connect your first model"
       emptyText="Add an OpenAI-compatible, Ollama or AWS endpoint. Credentials stay in environment variables, never in the catalog."
+    />
+  );
+}
+
+export function Routers({ rows, models }: { rows: Row[]; models: Row[] }) {
+  const name = (id: string) => models.find((m) => m.id === id)?.name || id;
+  return (
+    <ResourceTable
+      rows={rows.map((r) => ({ ...r, tiers: (r.models || []).map(name).join(' → '), judge: r.judge_model ? name(r.judge_model) : 'heuristics only' }))}
+      columns={['name', 'tiers', 'judge', 'min_score', 'revision']}
+      emptyIcon={Route}
+      emptyTitle="No routers yet"
+      emptyText="List two to five chat models, cheapest first. Select the router as router:<id> in Playground or the API."
     />
   );
 }

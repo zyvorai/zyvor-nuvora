@@ -45,6 +45,7 @@ function loadChats(key: string): Conversation[] {
 
 export default function Playground({
   models,
+  routers = [],
   knowledge,
   canWrite,
   act,
@@ -52,6 +53,7 @@ export default function Playground({
   seed,
 }: {
   models: Row[];
+  routers?: Row[];
   knowledge: Row[];
   canWrite: boolean;
   act: Act;
@@ -74,7 +76,7 @@ export default function Playground({
   const [retrieving, setRetrieving] = useState(false);
   const busy = retrieving || active.turns.some((t) => t.role === 'assistant' && t.answers.some((a) => a.streaming));
   const chatModels = useMemo(() => models.filter((m) => m.capability === 'chat'), [models]);
-  const modelName = (id: string) => (id === 'auto' ? 'Auto' : chatModels.find((m) => m.id === id)?.name || id);
+  const modelName = (id: string) => (id === 'auto' ? 'Auto' : id.startsWith('router:') ? 'Router · ' + (routers.find((r) => 'router:' + r.id === id)?.name || id) : chatModels.find((m) => m.id === id)?.name || id);
 
   useEffect(() => {
     try {
@@ -383,7 +385,7 @@ export default function Playground({
                         <span className="small muted">
                           {a.stopped
                             ? 'Stopped'
-                            : [a.meta?.cached ? 'Cache hit' : 'Fresh response', money(a.meta?.cost || 0), a.meta?.routing, a.meta?.latency_ms != null ? a.meta.latency_ms + ' ms' : '', a.meta?.usage ? `${(a.meta.usage.prompt_tokens || 0) + (a.meta.usage.completion_tokens || 0)} tokens` : '', a.meta?.grounding ? `Grounding ${a.meta.grounding.score}` : '']
+                            : [a.meta?.cached ? 'Cache hit' : 'Fresh response', money(a.meta?.cost || 0), a.meta?.routing, a.meta?.latency_ms != null ? a.meta.latency_ms + ' ms' : '', a.meta?.usage ? `${(a.meta.usage.prompt_tokens || 0) + (a.meta.usage.completion_tokens || 0)} tokens` : '', a.meta?.grounding ? `Grounding ${a.meta.grounding.score}` : '', a.meta?.escalations ? `${a.meta.escalations.length} escalation(s)` : '']
                                 .filter(Boolean)
                                 .join(' · ')}
                         </span>
@@ -417,6 +419,11 @@ export default function Playground({
                     {m.name}
                   </option>
                 ))}
+                {routers.map((r) => (
+                  <option key={r.id} value={'router:' + r.id}>
+                    Router · {r.name}
+                  </option>
+                ))}
               </select>
             </Field>
             {active.compare ? (
@@ -426,6 +433,11 @@ export default function Playground({
                   {chatModels.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.name}
+                    </option>
+                  ))}
+                  {routers.map((r) => (
+                    <option key={r.id} value={'router:' + r.id}>
+                      Router · {r.name}
                     </option>
                   ))}
                 </select>

@@ -11,6 +11,7 @@ export type Command = { id: string; group: string; label: string; hint?: string;
 
 const RESOURCE_KINDS: [string, string][] = [
   ['models', 'Model'],
+  ['routers', 'Router'],
   ['knowledge', 'Knowledge base'],
   ['agents', 'Agent'],
   ['actions', 'Action'],

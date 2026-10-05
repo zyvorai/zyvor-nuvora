@@ -344,7 +344,8 @@ class Handler(BaseHTTPRequestHandler):
                     self.respond(200,result)
                 return
             if path=='/v1/models':
-                self.respond(200,{'object':'list','data':[{'id':m['id'],'object':'model','owned_by':m['provider'],'name':m['name']} for m in app.list(p,'models') if m.get('enabled')]})
+                self.respond(200,{'object':'list','data':[{'id':m['id'],'object':'model','owned_by':m['provider'],'name':m['name']} for m in app.list(p,'models') if m.get('enabled')]
+                                  +[{'id':'router:'+r['id'],'object':'model','owned_by':'nuvora-router','name':r['name']} for r in app.list(p,'routers')]})
                 return
             if path=='/api/answer' and method=='POST':
                 require(p,'developer','admin')

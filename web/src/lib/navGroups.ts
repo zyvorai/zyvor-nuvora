@@ -3,6 +3,7 @@ export const pages = [
   'overview',
   'playground',
   'models',
+  'routers',
   'knowledge',
   'agents',
   'actions',
@@ -50,6 +51,7 @@ export const navGroups: NavGroup[] = [
     children: [
       { page: 'playground', label: 'Playground', blurb: 'Ask a model, optionally grounded in a knowledge base, with cited evidence.' },
       { page: 'models', label: 'Models', blurb: 'OpenAI-compatible, Ollama and AWS endpoints, with operator pricing.' },
+      { page: 'routers', label: 'Routers', blurb: 'Try a cheaper model first and escalate when the answer falls short.' },
       { page: 'knowledge', label: 'Knowledge', blurb: 'Index documents and inspect exactly what retrieval returns.' },
     ],
   },
@@ -75,7 +77,7 @@ export const navGroups: NavGroup[] = [
     label: 'Govern',
     children: [
       { page: 'approvals', label: 'Approvals', blurb: 'Exact-action decisions by a different person.' },
-      { page: 'policies', label: 'Guardrails', blurb: 'Topic, instruction-override, size and PII rules on inputs and outputs.' },
+      { page: 'policies', label: 'Guardrails', blurb: 'Word, regex, PII, grounding and classifier checks on inputs and outputs.' },
       { page: 'usage', label: 'Usage & cost', blurb: 'Tokens, latency and estimated spend per model.' },
       { page: 'audit', label: 'Evidence', blurb: 'The hash-chained audit trail, verifiable and exportable.' },
       { page: 'users', label: 'Access', blurb: 'Workspace members and their roles.' },

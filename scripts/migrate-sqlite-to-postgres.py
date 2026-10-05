@@ -22,7 +22,7 @@ TABLES = {
     'users': ('tenant', 'username', 'password', 'role', 'identity'),
     'tokens': ('digest', 'tenant', 'username', 'role', 'expires', 'id', 'kind', 'label', 'created'),
     'audit': ('seq', 'tenant', 'event', 'previous', 'digest'),
-    'usage': ('id', 'tenant', 'model', 'input_tokens', 'output_tokens', 'cost', 'latency_ms', 'cached', 'created'),
+    'usage': ('id', 'tenant', 'model', 'input_tokens', 'output_tokens', 'cost', 'latency_ms', 'cached', 'created', 'cached_tokens', 'saved'),
     'idempotency': ('tenant', 'key', 'fingerprint', 'value'),
 }
 

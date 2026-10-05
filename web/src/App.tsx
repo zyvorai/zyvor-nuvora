@@ -35,11 +35,12 @@ import Batches from './pages/Batches';
 import Usage from './pages/Usage';
 import Audit from './pages/Audit';
 import Users from './pages/Users';
-import { Actions, Models, Recipes } from './pages/Catalog';
+import { Actions, Models, Recipes, Routers } from './pages/Catalog';
 
 const pageHero: Partial<Record<Page, { title: string; lede: string; tint?: HeroTint }>> = {
   playground: { title: 'Ask. Ground. Verify.', lede: 'Choose a model, optionally ground it in a knowledge base, and see the exact passages behind every answer.' },
   models: { title: 'Choose the model. Keep the control.', lede: 'OpenAI-compatible, Ollama and optional AWS endpoints on an operator allowlist. Credentials stay in the environment, never in the catalog.' },
+  routers: { title: 'Pay for the big model only when you need it.', lede: 'A cascade tries the cheapest model first and escalates when the answer is empty, hedged or scored low by a judge model. Every attempt is metered.', tint: 'amber' },
   knowledge: { title: 'Answers start with evidence.', lede: 'Index documents with content digests, then inspect exactly what BM25 and vector fusion retrieve before a model sees it.', tint: 'green' },
   agents: { title: 'Give intelligence a purpose.', lede: 'Bounded model and tool loops with registered schemas. Memory writes and external actions pause for a different human.', tint: 'purple' },
   actions: { title: 'Connect the systems you trust.', lede: 'Typed enterprise APIs registered by an administrator. Writes wait for an exact-argument approval and never retry on their own.', tint: 'purple' },
@@ -50,7 +51,7 @@ const pageHero: Partial<Record<Page, { title: string; lede: string; tint?: HeroT
   evaluations: { title: 'Measure before you promote.', lede: 'Phrase assertions, LLM-judge criteria and groundedness checks with pass thresholds and release verdicts, comparable across revisions.', tint: 'green' },
   batches: { title: 'Run many prompts as one.', lede: 'Queue up to 100 prompts as one durable run. Each item records its own success or failure.' },
   approvals: { title: 'The decision stays with you.', lede: 'Exact actions, their proposer, expiry and fingerprint. An author can never approve their own proposal.', tint: 'red' },
-  policies: { title: 'A consistent boundary for every model.', lede: 'Topic, instruction-override, size and PII rules applied to inputs and outputs, with a daily token budget.', tint: 'red' },
+  policies: { title: 'A consistent boundary for every model.', lede: 'Words, topics, regex filters, PII entities, grounding and an optional classifier model, applied to inputs and outputs, with a daily token budget.', tint: 'red' },
   usage: { title: 'Know what intelligence costs.', lede: 'Tokens, latency and estimated spend per request, priced at operator-configured rates.', tint: 'amber' },
   audit: { title: 'Trace the action back to its evidence.', lede: 'A hash-chained audit trail for every session, change, run and decision in this workspace.', tint: 'red' },
   keys: { title: 'Keys that can only do enough.', lede: 'Scoped, expiring service tokens for scripts, CI and the OpenAI-compatible API. They can view or propose, never approve.', tint: 'amber' },
@@ -58,8 +59,8 @@ const pageHero: Partial<Record<Page, { title: string; lede: string; tint?: HeroT
   users: { title: 'The right access. The right workspace.', lede: 'Viewers read, developers propose, approvers decide, administrators manage. Every workspace is isolated.' },
 };
 
-const COLLECTIONS = ['models', 'knowledge', 'agents', 'actions', 'workflows', 'prompts', 'policies', 'evaluations', 'recipes', 'jobs', 'approvals'];
-const CREATABLE: Page[] = ['models', 'agents', 'actions', 'knowledge', 'workflows', 'prompts', 'policies', 'evaluations', 'recipes'];
+const COLLECTIONS = ['models', 'routers', 'knowledge', 'agents', 'actions', 'workflows', 'prompts', 'policies', 'evaluations', 'recipes', 'jobs', 'approvals'];
+const CREATABLE: Page[] = ['models', 'routers', 'agents', 'actions', 'knowledge', 'workflows', 'prompts', 'policies', 'evaluations', 'recipes'];
 const ADMIN_ONLY: Page[] = ['models', 'policies', 'actions'];
 
 export default function App() {
@@ -270,8 +271,9 @@ function Console() {
         onInspectRun={(run) => openResource('jobs', run.id)}
       />
     ),
-    playground: <Playground models={collections.models || []} knowledge={collections.knowledge || []} canWrite={canWrite} act={act} principal={principal} seed={askSeed} />,
+    playground: <Playground models={collections.models || []} routers={collections.routers || []} knowledge={collections.knowledge || []} canWrite={canWrite} act={act} principal={principal} seed={askSeed} />,
     models: <Models rows={rows} />,
+    routers: <Routers rows={rows} models={collections.models || []} />,
     knowledge: <Knowledge rows={rows} canWrite={canWrite} act={act} refresh={refresh} />,
     agents: <Agents rows={rows} canWrite={canWrite} act={act} />,
     actions: <Actions rows={rows} />,

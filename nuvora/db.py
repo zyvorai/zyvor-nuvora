@@ -8,7 +8,7 @@ import sqlite3
 import threading
 import zlib
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 TABLES = '''
 CREATE TABLE IF NOT EXISTS objects (
@@ -43,6 +43,12 @@ CREATE INDEX IF NOT EXISTS login_failures_key ON login_failures (tenant,username
 CREATE TABLE IF NOT EXISTS workers (id TEXT PRIMARY KEY, seen REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);
 '''
+
+# Columns added after 0.2, applied idempotently to new and upgraded databases.
+COLUMNS = [
+    ('usage', 'cached_tokens', 'INTEGER NOT NULL DEFAULT 0'),
+    ('usage', 'saved', 'REAL NOT NULL DEFAULT 0'),
+]
 
 
 class Row(dict):
@@ -85,6 +91,8 @@ class Database:
         for statement in self.statements(self.ddl(TABLES)):
             self.execute(statement)
         self.legacy()
+        for table, column, ddl in COLUMNS:
+            self.add_column(table, column, self.ddl(' '+ddl+' ').strip())
         current = self.version()
         if current > SCHEMA_VERSION:
             raise RuntimeError(f'Database schema {current} is newer than this Nuvora ({SCHEMA_VERSION}); upgrade Nuvora')
@@ -94,6 +102,9 @@ class Database:
 
     def legacy(self):
         """Bring pre-versioned (0.1) databases up to the current shape."""
+
+    def add_column(self, table, column, ddl):
+        raise NotImplementedError
 
 
 class SqliteDB(Database):
@@ -133,6 +144,10 @@ class SqliteDB(Database):
                 self.conn.execute(f'ALTER TABLE tokens ADD COLUMN {name} {ddl}')
         if 'identity' not in {r['name'] for r in self.conn.execute('PRAGMA table_info(users)')}:
             self.conn.execute("ALTER TABLE users ADD COLUMN identity TEXT NOT NULL DEFAULT ''")
+
+    def add_column(self, table, column, ddl):
+        if column not in {r['name'] for r in self.conn.execute(f'PRAGMA table_info({table})')}:
+            self.conn.execute(f'ALTER TABLE {table} ADD COLUMN {column} {ddl}')
 
     def close(self):
         self.conn.close()
@@ -193,6 +208,9 @@ class PostgresDB(Database):
 
     def for_update(self):
         return ' FOR UPDATE SKIP LOCKED'
+
+    def add_column(self, table, column, ddl):
+        self.execute(f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {ddl}')
 
     def migrate(self):
         with self.lock:
