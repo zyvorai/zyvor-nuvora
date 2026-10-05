@@ -6,7 +6,8 @@ Evidence terms: **local test** means exercised in this repository; **adapter** m
 |---|---|---|
 | Password sign-in and HttpOnly sessions | Local test | PBKDF2-SHA256, 8-hour sessions, process-local failed-login throttling |
 | Tenant storage and RBAC | Local test | Object reads/writes bind to the authenticated tenant; admin is tenant-local |
-| Service tokens | Local test | Only viewer/developer roles; no approval authority; hash stored at rest |
+| Service tokens | Local test | Only viewer/developer roles; no approval authority; hash stored at rest; listed and revoked by owner or admin; revoked when the owner is demoted below developer |
+| Password change and member management | Local test | Password change revokes your other sessions; admins change roles or remove members; you can't change yourself and the last admin is protected |
 | OpenAI-compatible completion | Adapter + local HTTP test | Buffered upstream; mapped usage; vLLM/Fabric/Gryvia require external endpoints |
 | Ollama native completion | Adapter + local HTTP test | No native Ollama tool-call path; use its OpenAI endpoint for agents |
 | Bedrock Converse | Adapter | Optional boto3; AWS account, model access and region required; no tool calling |
@@ -29,14 +30,15 @@ Evidence terms: **local test** means exercised in this repository; **adapter** m
 | Inference budget/concurrency | Local test | Chat tokens and estimated configured cost; four calls per user; embeddings excluded |
 | Prompt/result cache | Local test | Opt-in, temperature zero, tenant/model/policy fingerprint, five-minute TTL; tools never cached |
 | Batch requests | Local test | Up to 100 items; per-item failure; no AWS-style batch discount |
-| SSE transport | Local test | Buffered after the complete upstream response; not live upstream token streaming |
+| SSE transport | Local test + adapter | `/api/chat/stream` streams OpenAI-compatible and Ollama output as it arrives, released at sentence boundaries after guardrail checks; demo and Bedrock replay a complete answer; `/v1/chat/completions` with `stream=true` stays buffered; closing the client stops the upstream read |
 | Evaluation / regression gate | Local test | Deterministic textual assertions; no human/LLM judges or production release integration |
 | LoRA/QLoRA/distillation/quantization | Recipe | Export only; no training job submitted or model modified |
 | Multimodal data automation | Roadmap | Workflow extract node projects fields from JSON; OCR/audio/video not implemented |
 | MCP subset | Local test | Initialize/tools/list/tools/call over POST; no streaming MCP sessions or full protocol conformance claim |
 | Hash-chained audit | Local test | Tamper detection within export; unsigned and rewriteable by a host administrator |
-| Docker and Helm deployment | Supplied | Files reviewed but not built/deployed in this environment |
-| Browser rendering/accessibility | Pending | DOM interaction tests passed; Chromium download failed; browser smoke exists in CI |
+| Docker and Helm deployment | Local test | Built and deployed to a single-node k3s host with `scripts/deploy-remote.sh`; multi-node and ingress not exercised |
+| Console | Local test | 19 pages, command palette, streaming playground, resource drawers with history and diff, workflow builder, run inspector, charts, API keys and Settings; Playwright smoke at 1440px and 390px in light and dark |
+| Browser accessibility | Partial | Labelled controls, keyboard navigation and ARIA roles checked by tests; no formal audit with assistive technology |
 | Multi-region HA / managed service SLAs | Roadmap | SQLite and one process; do not scale replicas against the same DB |
 
 No market-superiority or AWS compliance equivalence claim is supported by these tests.

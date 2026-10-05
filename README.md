@@ -156,10 +156,11 @@ Optional Bedrock access: run `python3 -m pip install '.[aws]'`, then create a Be
 | Workflows | Ordered DAG validation, retrieve/generate/template/condition/extract/review nodes, durable checkpoints |
 | Prompts | Variable validation, optimistic revision edits, retained version snapshots |
 | Evaluation | Contains/excludes suites, scores, release verdicts, comparable-suite regression endpoint |
-| Governance | Tenant isolation, viewer/developer/approver/admin roles, scoped service tokens, separate-human approvals |
+| Governance | Tenant isolation, viewer/developer/approver/admin roles, scoped and revocable service tokens, member role management, separate-human approvals |
 | Guardrails | Topic patterns, instruction-override patterns, size limits, email/account redaction; applied to inputs/outputs |
-| Inference operations | Buffered SSE-compatible responses, deterministic cache, batch jobs, token budgets, concurrency caps |
-| Evidence | Job traces, source digests, hash-chained audit, JSON exports and offline chain verification |
+| Inference operations | Live guardrail-checked streaming in the console, buffered SSE on `/v1`, deterministic cache, batch jobs, token budgets, concurrency caps |
+| Evidence | Job traces, source digests, hash-chained audit with filters, CSV and JSON exports, offline chain verification |
+| Console | Command palette, streaming playground with model compare, resource drawers with history and diff, workflow builder, run inspector with inline approval, usage charts |
 | Delivery | Compiled console, Python SDK/CLI, Docker/Compose, Helm chart, k3s deploy script, GitHub Actions, unit/API/DOM/browser tests |
 
 ## Develop and test

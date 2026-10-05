@@ -1,9 +1,15 @@
-# Release 0.1.0 preparation
+# Release process
 
-Target repository: `zyvorai/zyvor-nuvora`. It has not been created by this delivery.
+Repository: [zyvorai/zyvor-nuvora](https://github.com/zyvorai/zyvor-nuvora), public and source-available under the Zyvor Production License v1.0. Production use needs a commercial license from Zyvor AI Labs.
 
-Review the source and docs, then create it locally with `scripts/push-github.sh` after `gh auth login`. The script starts private and requires your local Git author settings. Use a different owner/name by editing the script before running. The directory contains no user credentials, test database or model weights.
+The compiled console is checked in to support a Python-only quickstart. Run `cd web && npm ci && npm run build` before committing changes to the console.
 
-The compiled console is checked in to support a Python-only quickstart. Run `cd web && npm ci && npm run build` before committing changes to the console. Verify backend/frontend checks before pushing. CI includes a browser smoke test. To run it against a deployment, set `NUVORA_TEST_URL`.
+Before pushing:
+1. Run `make check`.
+2. Run the browser smoke against a local demo server. To refresh the screenshots, run it against a deployment with `NUVORA_TEST_URL` and `NUVORA_SCREENSHOT_DIR=docs/ux`, and replace any real host name on the sign-in shot.
+3. Rebuild the social and README artwork with `docs/social/build.sh`.
+4. Update `CHANGELOG.md`, `docs/API.md`, `docs/CAPABILITIES.md` and `docs/VALIDATION.md`.
+
+CI runs the backend matrix, the console build and tests, Helm and shell checks, and a Chromium smoke. Pushing to `main` also publishes the docs site to GitHub Pages.
 
 Before a production release, complete the integration and readiness work in docs/ROADMAP.md and document measured capability status. Do not publish competitor performance claims from this evaluation build.

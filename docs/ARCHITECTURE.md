@@ -10,7 +10,7 @@ The current integration with Fabric/Gryvia is their OpenAI-compatible model endp
 2. Same-origin cookie mutations require the session-derived CSRF token. Bearer API clients are independently authenticated.
 3. Every resource lookup has tenant in its SQL predicate. IDs alone never authorize access.
 4. Model URLs must match the operator's host allowlist. Remote URLs require HTTPS; credentials remain environment references. Redirects are refused.
-5. Chat applies the active tenant policy before and after generation. Tool arguments are checked before dispatch.
+5. Chat applies the active tenant policy before and after generation. Streamed chat releases text only at sentence boundaries, after the output policy passes. Tool arguments are checked before dispatch.
 6. The inference ledger records model, usage, configured cost, latency and cache state. Prompt bodies are not placed in the audit ledger. Jobs can contain their supplied input and tool evidence.
 
 ## Storage

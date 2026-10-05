@@ -16,6 +16,7 @@ Nuvora is a Python standard-library HTTP server with SQLite storage and a single
 4. Model URLs must match the operator's host allow-list. Remote URLs require HTTPS, credentials are environment references, and redirects are refused.
 5. Chat applies the tenant's guardrails before and after generation. Tool arguments are checked before dispatch.
 6. The inference ledger records model, usage, configured cost, latency, and cache state. Prompt bodies stay out of the audit ledger.
+7. `/api/chat/stream` sends server-sent events. Text is held until a sentence boundary and checked against the output guardrails before it's released.
 
 ## Storage
 

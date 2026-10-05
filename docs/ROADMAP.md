@@ -16,7 +16,7 @@
 
 ## Models and optimization
 
-- True upstream SSE with cancellation, usage finalization and transport tests.
+- Live upstream streaming on `/v1/chat/completions` (the console stream is live already), and Bedrock ConverseStream.
 - Explicit provider retry/failover policies with response-start safety.
 - Tokenizer-aware estimates and embedding usage/budget accounting.
 - Real fine-tuning/distillation submissions through Gryvia with dataset lineage and evaluation-based promotion.
@@ -29,6 +29,6 @@
 - Tenant retention/delete/export policies, quotas for every API path, scalable login throttling.
 - Signed audit checkpoints and external immutable storage anchors.
 - Complete MCP protocol transport, A2A adapters and OpenTelemetry trace export.
-- Browser accessibility audit and desktop/mobile visual approval.
+- Formal accessibility audit with assistive technology.
 
 All roadmap entries are absent unless the capability matrix explicitly marks them as implemented. Keep performance and compliance claims tied to independently reproducible evidence.

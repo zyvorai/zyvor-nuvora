@@ -72,8 +72,14 @@ python3 scripts/verify-evidence.py nuvora-audit.json
 
 Verification detects changed exported events. It cannot establish who produced the export or protect against a host administrator replacing the chain. Anchor chain tips externally or add a signing service before using this as independent audit proof.
 
+## People and keys
+
+Administrators manage members in **Govern → Access**: create, change role, or remove. You can't change your own role or remove yourself, and the last administrator can't be demoted or removed. Demoting someone below developer revokes their service tokens.
+
+Anyone can change their password from the account menu; that signs out their other sessions. Service tokens are created and revoked in **Govern → API keys** or with `POST`/`DELETE /api/tokens`. The secret is shown once. **Govern → Settings** shows administrators the effective transport, worker state, provider allow-list, policy, budget and limits.
+
 ## Limits
 
-Chat timeout 45 seconds to providers, 1 MiB API body, up to 100 chat messages, max 8192 output tokens, up to 100 batch items, max 20 agent steps, four concurrent calls per user. The local worker executes serially. Inference rates are configured estimates. Embedding requests are not yet included in the chat budget/ledger.
+Chat timeout 45 seconds to providers (a streamed answer may run longer while data keeps arriving), 1 MiB API body, up to 100 chat messages, max 8192 output tokens, up to 100 batch items, max 20 agent steps, four concurrent calls per user. The local worker executes serially. Inference rates are configured estimates. Embedding requests are not yet included in the chat budget/ledger.
 
 No destructive production tools are registered. Adding one must include an exact action schema, scoped authorization, separate-human approval, idempotency, preconditions, outcome validation and a rollback procedure. Keep microVM integration is required before allowing untrusted browser/code tools.

@@ -2,9 +2,9 @@
 
 ## Completed locally
 
-- Python 3.12.14: **80 backend tests passed** (`python3 -m unittest discover -s tests -v`).
+- Python 3.12.14: **90 backend tests passed** (`python3 -m unittest discover -s tests -v`).
 - Node 24.19.0: TypeScript check and Vite production build passed.
-- Vitest: **15 frontend API and React DOM interaction tests passed**.
+- Vitest: **30 frontend tests passed**: API helpers, notifications, password strength, and React DOM interaction (sign-in, navigation, playground streaming, command palette, shortcuts, drawer history and diff, API keys, logout).
 - Built the installable Python wheel with `pip wheel --no-build-isolation --no-deps`.
 - Extracted the source archive to a clean temporary directory and verified every SHA-256 manifest entry.
 - Started the extracted repository without Node or pip installs; the prebuilt console was served.
@@ -19,9 +19,10 @@ Provider network tests ran against a local HTTP stub for OpenAI-compatible compl
   - HTTPS NodePort 30789 with a persistent self-signed certificate
   - the PVC bound on `local-path`
   - `/healthz` reachable externally, and a wrong login refused with 401
-- The Playwright browser smoke against that deployment: **52 checks passed**.
+- The Playwright browser smoke against that deployment: **63 checks passed**.
   - Covers sign-in errors, the mega menu, all 19 pages, and the evaluate-to-runs flow.
-  - Covers evidence-chain verification, dark mode persisting across a reload, no horizontal overflow at 390px, and logout.
+  - Covers a two-turn streamed playground conversation, the command palette, the workflow drawer, history and builder, and API key create and revoke.
+  - Covers evidence-chain verification, dark mode persisting across a reload, no horizontal overflow at 390px, and logout through the account menu.
   - The screenshots in `docs/ux/` are from this run.
 - `helm lint`, `helm template`, `shellcheck`, and `scripts/ci-deploy-guards.sh` (32 checks) passed.
 

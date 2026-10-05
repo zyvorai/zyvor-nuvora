@@ -13,14 +13,17 @@ Nuvora is an evaluation release. This page says what it enforces and what it doe
 - **Sessions.**
   - Cookies are HttpOnly and `SameSite=Strict`, and Secure over TLS.
   - Mutations need a CSRF token and pass Origin validation.
-  - Bearer tokens are scoped and stored only as digests.
+  - Bearer tokens are scoped and stored only as digests. Owners and admins can list and revoke them, and demotion below developer revokes them.
+  - Changing your password signs out your other sessions.
 - **Passwords.**
   - Passwords need 12–256 characters and are stored as PBKDF2-SHA256 hashes.
   - The only exception is the deploy demo password for the bootstrap administrator, and only when it's explicitly allowed.
+  - The console never stores passwords in the browser. Playground conversations are kept in local storage, per workspace and user.
 - **Outbound calls.**
   - Calls go only to hosts on an exact allow-list, over HTTPS for remote hosts. Redirects are refused.
   - Credentials are environment references, never stored values.
 - **Separation of duties.** Consequential actions need a different person's approval, bound to an exact fingerprint.
+- **Streaming.** Streamed answers pass the output guardrails at sentence boundaries before any text reaches the browser.
 - **Evidence.** The audit log is hash-chained, and `scripts/verify-evidence.py` checks an export offline.
 - **Transport.** Remote binds require direct TLS or an explicitly trusted TLS proxy. The content security policy is `script-src 'self'`.
 
