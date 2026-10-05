@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 """Verify an exported audit chain offline. Detects tampering, not authenticity."""
 import argparse
 import hashlib

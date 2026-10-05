@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 // @vitest-environment jsdom
 import {afterEach,describe,expect,it,vi} from 'vitest';
 import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';

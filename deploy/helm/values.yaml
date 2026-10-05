@@ -1,10 +1,10 @@
 image:
   repository: ghcr.io/zyvorai/zyvor-nuvora
-  tag: "0.1.0"
+  tag: "0.2.0"
   pullPolicy: IfNotPresent
 # Secret with key `password`: the first administrator's password (first start only).
 adminSecret: nuvora-admin
-# Accept the Netra-style demo password Admin@321 for that first administrator.
+# Accept the Netra-style demo password Admin@321 for that first administrator (labs only).
 # Every other account still needs 12+ characters. Keep false outside labs.
 allowDemoPassword: false
 # Seed the offline demo workspace (synthetic model, knowledge base, agent, workflow).
@@ -19,12 +19,35 @@ service:
 # a TLS-terminating ingress or proxy (NUVORA_BEHIND_TLS_PROXY=1).
 tls:
   existingSecret: ""
+# Pods. More than one requires PostgreSQL (database.urlSecret).
+replicas: 1
+# PostgreSQL instead of SQLite on the PVC: name of a Secret with key `url`
+# (postgresql://user:pass@host:5432/nuvora?sslmode=require). Needs the image's postgres extra.
+# With PostgreSQL there is no PVC and upgrades roll without downtime.
+database:
+  urlSecret: ""
+# SQLite volume, used only when database.urlSecret is empty.
 storage:
   size: 10Gi
   className: ""
 resources:
   requests: {cpu: 100m, memory: 128Mi}
   limits: {cpu: "2", memory: 1Gi}
+# OpenID Connect single sign-on (Keycloak, Entra ID, Okta, Haven…). Empty issuer disables it.
+# Register redirect URL https://<host>/api/auth/oidc/callback with the identity provider.
+oidc:
+  issuer: ""            # e.g. https://keycloak.example.com/realms/zyvor
+  clientId: ""
+  clientSecret: ""      # name of a Secret with key `client-secret`; also signs login state across replicas
+  redirectUrl: ""       # defaults to https://<Host>/api/auth/oidc/callback
+  scopes: "openid profile email"
+  rolesClaim: "roles"   # dotted path, e.g. realm_access.roles for Keycloak
+  roleMap: ""           # "nuvora-admins=admin,nuvora-devs=developer"
+  defaultRole: "viewer" # "none" refuses users whose groups map to no role
+  tenantClaim: ""
+  identityClaim: "preferred_username"
+  audience: ""          # bearer JWT audience; defaults to clientId
+  label: ""             # login button text, e.g. "Zyvor ID"
 ingress:
   enabled: false
   className: ""

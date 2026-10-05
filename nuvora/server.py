@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 """Same-origin HTTP API and built console. Standard library runtime."""
 import argparse
 import hashlib
@@ -6,18 +7,20 @@ import mimetypes
 import os
 from pathlib import Path
 import secrets
-import sqlite3
 import ssl
 import threading
 import time
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlsplit, unquote
-from .platform import Platform, KINDS, TOOLS
+from urllib.parse import quote, urlsplit, unquote
+from . import __version__, integrations, oidc as sso
+from .platform import Platform, KINDS
 from .security import Auth, Fault, require, guard
 from .store import Store, canonical
 
 STATIC=Path(__file__).parent/'static'
+# 20 MiB of file content, base64-encoded, plus the JSON envelope.
+UPLOAD_BODY=28*1024*1024
 
 class Server(ThreadingHTTPServer):
     daemon_threads=True
@@ -26,9 +29,28 @@ class Server(ThreadingHTTPServer):
         self.secure=secure
         super().__init__(address,Handler)
 
+def openai_chunks(events):
+    """Map Nuvora stream events to OpenAI chat.completion.chunk frames."""
+    head={'id':'chatcmpl-'+secrets.token_hex(12),'object':'chat.completion.chunk','created':int(time.time()),'model':''}
+    try:
+        for item in events:
+            kind=item.get('event')
+            if kind=='start':
+                head['model']=item['model']
+                yield {**head,'choices':[{'index':0,'delta':{'role':'assistant','content':''},'finish_reason':None}]}
+            elif kind=='delta':
+                yield {**head,'choices':[{'index':0,'delta':{'content':item['text']},'finish_reason':None}]}
+            elif kind=='done':
+                yield {**head,'choices':[{'index':0,'delta':{},'finish_reason':'stop'}],'usage':item.get('usage',{}),
+                       'nuvora':{'evidence_class':item.get('evidence_class'),'cached':item.get('cached'),'cost':item.get('cost')}}
+        yield {'event':'done','__raw__':'[DONE]'}
+    finally:
+        events.close()
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version='HTTP/1.1'
-    server_version='Nuvora/0.1'
+    server_version='Nuvora/'+__version__
 
     def log_message(self, fmt, *args):
         # Request paths may contain secrets; logs report status only.
@@ -49,8 +71,11 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
-    def sse(self,events):
-        """Stream server-sent events; the connection closes when the generator ends."""
+    def sse(self,events,openai=False):
+        """Stream server-sent events; the connection closes when the generator ends.
+
+        openai=True writes OpenAI chat.completion.chunk frames (no event names, a final
+        data: [DONE]) instead of Nuvora's named start/delta/done events."""
         self.send_response(200)
         self.send_header('Content-Type','text/event-stream; charset=utf-8')
         self.send_header('Cache-Control','no-store')
@@ -60,19 +85,64 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.close_connection=True
         def write(event,data):
-            self.wfile.write(('event: '+event+'\ndata: '+canonical(data)+'\n\n').encode())
+            if openai:
+                frame='data: '+(data if isinstance(data,str) else canonical(data))+'\n\n'
+            else:
+                frame='event: '+event+'\ndata: '+canonical(data)+'\n\n'
+            self.wfile.write(frame.encode())
             self.wfile.flush()
         try:
             for item in events:
                 event=item.pop('event','message')
-                write(event,item)
+                write(event,item.get('__raw__',item))
         except Fault as exc:
-            write('error',{'error':str(exc),'status':exc.status})
+            if openai:
+                write('error',{'error':{'message':str(exc),'type':'nuvora_error','code':exc.status}})
+            else:
+                write('error',{'error':str(exc),'status':exc.status})
         except (BrokenPipeError,ConnectionResetError):
             events.close()
         except Exception:
             traceback.print_exc()
             write('error',{'error':'Internal error','status':500})
+
+    def redirect(self,location,cookies=()):
+        self.send_response(302)
+        self.send_header('Location',location)
+        self.send_header('Content-Length','0')
+        self.send_header('Cache-Control','no-store')
+        self.send_header('Referrer-Policy','no-referrer')
+        for cookie in cookies:
+            self.send_header('Set-Cookie',cookie)
+        self.end_headers()
+
+    def base_url(self):
+        return ('https' if self.server.secure else 'http')+'://'+self.headers.get('Host','localhost')
+
+    def cookie(self,name):
+        for piece in self.headers.get('Cookie','').split(';'):
+            key,_,value=piece.strip().partition('=')
+            if key==name:
+                return value
+        return ''
+
+    def oidc_route(self,app,path):
+        provider=app.auth.oidc
+        secure='; Secure' if self.server.secure else ''
+        clear=sso.STATE_COOKIE+'=; HttpOnly; SameSite=Lax; Path=/api/auth/oidc; Max-Age=0'+secure
+        if not provider:
+            raise Fault('Single sign-on is not configured',404)
+        if path=='/api/auth/oidc/login':
+            location,sealed=provider.login(self.base_url())
+            self.redirect(location,[sso.STATE_COOKIE+'='+sealed+'; HttpOnly; SameSite=Lax; Path=/api/auth/oidc; Max-Age='+str(sso.STATE_TTL)+secure])
+            return
+        try:
+            claims=provider.callback(self.base_url(),self.query(),self.cookie(sso.STATE_COOKIE))
+            token=app.auth.sso_login(*provider.identity(claims))
+        except Fault as exc:
+            self.redirect('/?sso_error='+quote(str(exc)[:200]),[clear])
+            return
+        self.redirect('/',[clear,'nuvora_session='+token+'; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800'+secure])
 
     def query(self):
         from urllib.parse import parse_qs
@@ -88,13 +158,13 @@ class Handler(BaseHTTPRequestHandler):
                 return value,True
         return '',False
 
-    def body(self):
+    def body(self,limit=1024*1024):
         try:
             size=int(self.headers.get('Content-Length','0'))
         except ValueError as exc:
             raise Fault('Invalid content length') from exc
-        if size<0 or size>1024*1024:
-            raise Fault('Request exceeds 1 MiB',413)
+        if size<0 or size>limit:
+            raise Fault('Request exceeds '+str(limit//(1024*1024))+' MiB',413)
         if self.headers.get('Transfer-Encoding'):
             raise Fault('Chunked request bodies are not accepted')
         if size and not self.headers.get('Content-Type','').startswith('application/json'):
@@ -130,7 +200,7 @@ class Handler(BaseHTTPRequestHandler):
             path=unquote(urlsplit(self.path).path)
             app=self.server.platform
             if path=='/healthz':
-                self.respond(200,{'status':'ok','version':'0.1.0','maturity':'evaluation'})
+                self.respond(200,{'status':'ok','version':__version__,'maturity':'evaluation'})
                 return
             if not path.startswith(('/api/','/v1/','/mcp')):
                 if method!='GET':
@@ -139,7 +209,15 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if method!='GET':
                 self.check_origin()
-            body=self.body() if method=='POST' else {}
+            upload=method=='POST' and path.startswith('/api/knowledge/') and path.endswith('/upload')
+            body=self.body(UPLOAD_BODY if upload else 1024*1024) if method=='POST' else {}
+            if path=='/api/auth/providers':
+                provider=app.auth.oidc
+                self.respond(200,{'password':True,'oidc':{'label':os.getenv('NUVORA_OIDC_LABEL','Single sign-on'),'login':'/api/auth/oidc/login'} if provider else None})
+                return
+            if path in ('/api/auth/oidc/login','/api/auth/oidc/callback') and method=='GET':
+                self.oidc_route(app,path)
+                return
             if path=='/api/login' and method=='POST':
                 token=app.auth.login(body.get('tenant','default'),body.get('username',''),body.get('password',''))
                 secure='; Secure' if self.server.secure else ''
@@ -189,12 +267,12 @@ class Handler(BaseHTTPRequestHandler):
                 require(p,'admin')
                 with app.store.lock:
                     demo=any(m.get('provider')=='demo' for m in app.list(p,'models'))
-                self.respond(200,{'version':'0.1.0','maturity':'evaluation release','tenant':p['tenant'],
+                self.respond(200,{'version':__version__,'maturity':'evaluation release','tenant':p['tenant'],
                                   'provider_hosts':sorted(app.providers.allowed_hosts),
                                   'transport':'direct TLS' if getattr(self.server,'direct_tls',False) else ('TLS proxy' if self.server.secure else 'loopback HTTP'),
                                   'demo_models':demo,'worker':'running' if getattr(app,'worker_thread',None) and app.worker_thread.is_alive() else 'stopped',
                                   'policy':app.policy(p),'budget':app.usage_series(p,1)['budget'],
-                                  'limits':{'chat_timeout_seconds':45,'body_bytes':1024*1024,'max_messages':100,'max_output_tokens':8192,'concurrent_calls_per_user':4}})
+                                  'limits':{'chat_timeout_seconds':45,'body_bytes':1024*1024,'upload_bytes':20*1024*1024,'max_messages':100,'max_output_tokens':8192,'concurrent_calls_per_user':4}})
                 return
             if path=='/api/password' and method=='POST':
                 app.auth.change_password(p,body.get('current',''),body.get('new',''),token)
@@ -204,7 +282,23 @@ class Handler(BaseHTTPRequestHandler):
                 self.sse(app.open_stream(p,body))
                 return
             if path=='/api/tools':
-                self.respond(200,{'tools':TOOLS})
+                self.respond(200,{'tools':app.tools()})
+                return
+            if path=='/api/integrations':
+                require(p,'admin')
+                self.respond(200,{'systems':app.integrations.status(),'presets':integrations.MODEL_PRESETS})
+                return
+            if path.startswith('/api/integrations/') and path.endswith('/test') and method=='POST':
+                require(p,'admin')
+                self.respond(200,app.integrations.check(path.split('/')[3]))
+                return
+            if path=='/api/models/presets':
+                require(p,'admin')
+                self.respond(200,{'presets':integrations.MODEL_PRESETS})
+                return
+            if path=='/api/models/discover' and method=='POST':
+                require(p,'admin')
+                self.respond(200,integrations.discover(body,app.providers.allowed_hosts))
                 return
             if path=='/api/tokens' and method=='POST':
                 self.respond(201,app.auth.issue(p,body.get('role','viewer'),body.get('lifetime',3600),body.get('label','')))
@@ -235,20 +329,16 @@ class Handler(BaseHTTPRequestHandler):
                     self.respond(201,{'username':body['username'],'role':body['role']})
                 else:
                     with app.store.lock:
-                        rows=app.store.db.execute('SELECT username,role FROM users WHERE tenant=?',(p['tenant'],)).fetchall()
+                        rows=app.store.db.execute("SELECT username,role,CASE WHEN identity='' THEN 'password' ELSE 'sso' END AS source FROM users WHERE tenant=?",(p['tenant'],)).fetchall()
                     self.respond(200,{'users':[dict(r) for r in rows]})
+                return
+            if path=='/v1/chat/completions' and method=='POST' and body.get('stream'):
+                self.sse(openai_chunks(app.open_stream(p,{k:v for k,v in body.items() if k!='stream'})),openai=True)
                 return
             if path in ('/api/chat','/v1/chat/completions') and method=='POST':
                 result=app.chat(p,body)
                 if path.startswith('/v1/'):
                     response={'id':'chatcmpl-'+secrets.token_hex(12),'object':'chat.completion','created':int(time.time()),'model':result['model'],'choices':[{'index':0,'message':{'role':'assistant','content':result['content']},'finish_reason':'stop'}],'usage':result['usage'],'nuvora':{'evidence_class':result['evidence_class'],'cached':result['cached'],'cost':result['cost']}}
-                    if body.get('stream'):
-                        chunk={'id':response['id'],'object':'chat.completion.chunk','created':response['created'],'model':result['model'],'choices':[{'index':0,'delta':{'role':'assistant','content':result['content']},'finish_reason':None}]}
-                        finish={**chunk,'choices':[{'index':0,'delta':{},'finish_reason':'stop'}]}
-                        # Buffered SSE transport; not incremental upstream token streaming.
-                        raw=('data: '+canonical(chunk)+'\n\ndata: '+canonical(finish)+'\n\ndata: [DONE]\n\n').encode()
-                        self.respond(200,raw,{'Content-Type':'text/event-stream; charset=utf-8'})
-                        return
                     self.respond(200,response)
                 else:
                     self.respond(200,result)
@@ -290,6 +380,9 @@ class Handler(BaseHTTPRequestHandler):
             if len(parts)>=2 and parts[0]=='api' and parts[1] in KINDS:
                 kind=parts[1]
                 id=parts[2] if len(parts)>2 else None
+                if len(parts)==4 and method=='GET' and kind=='knowledge' and parts[3]=='documents':
+                    self.respond(200,{'items':app.documents(p,id)})
+                    return
                 if len(parts)==4 and method=='GET' and parts[3]=='versions':
                     app.get(p,kind,id)
                     self.respond(200,{'items':[v for v in app.store.list(p['tenant'],'versions') if v['collection']==kind and v['resource_id']==id]})
@@ -298,6 +391,8 @@ class Handler(BaseHTTPRequestHandler):
                     action=parts[3]
                     if kind=='knowledge' and action=='ingest':
                         self.respond(201,app.ingest(p,id,body)); return
+                    if kind=='knowledge' and action=='upload':
+                        self.respond(201,app.upload(p,id,body)); return
                     if kind in ('agents','workflows','evaluations') and action=='run':
                         typ={'agents':'agent','workflows':'workflow','evaluations':'evaluation'}[kind]
                         self.respond(202,app.new_job(p,typ,id,body,self.headers.get('Idempotency-Key'))); return
@@ -314,6 +409,9 @@ class Handler(BaseHTTPRequestHandler):
                     self.respond(200,app.get(p,kind,id) if id else {'items':app.list(p,kind)})
                 elif method=='POST':
                     self.respond(201,app.create(p,kind,body,id))
+                elif method=='DELETE' and kind=='documents' and id:
+                    app.delete_document(p,id)
+                    self.respond(200,{'ok':True})
                 elif method=='DELETE':
                     app.delete(p,kind,id)
                     self.respond(200,{'ok':True})
@@ -325,8 +423,8 @@ class Handler(BaseHTTPRequestHandler):
             self.respond(exc.status,{'error':str(exc)})
         except KeyError:
             self.respond(404,{'error':'Object or required field not found'})
-        except (ValueError,TypeError,sqlite3.IntegrityError) as exc:
-            self.respond(400,{'error':str(exc) if not isinstance(exc,sqlite3.IntegrityError) else 'Object already exists'})
+        except (ValueError,TypeError,self.server.platform.store.db.IntegrityError) as exc:
+            self.respond(400,{'error':str(exc) if not isinstance(exc,self.server.platform.store.db.IntegrityError) else 'Object already exists'})
         except (BrokenPipeError,ConnectionResetError):
             pass
         except Exception:
@@ -338,7 +436,7 @@ class Handler(BaseHTTPRequestHandler):
         id=body.get('id')
         result={}
         if method=='initialize':
-            result={'protocolVersion':'2025-03-26','capabilities':{'tools':{}},'serverInfo':{'name':'nuvora','version':'0.1.0'}}
+            result={'protocolVersion':'2025-03-26','capabilities':{'tools':{}},'serverInfo':{'name':'nuvora','version':__version__}}
         elif method=='tools/list':
             result={'tools':[{'name':'list_models','description':'List this tenant’s models','inputSchema':{'type':'object','properties':{}}},{'name':'search_knowledge','description':'Retrieve tenant-scoped cited evidence','inputSchema':{'type':'object','properties':{'knowledge_ids':{'type':'array','items':{'type':'string'}},'query':{'type':'string'}},'required':['knowledge_ids','query']}}]}
         elif method=='tools/call':
@@ -386,11 +484,15 @@ def main():
         parser.error('Both TLS files are required')
     if args.host not in ('127.0.0.1','localhost','::1') and not args.tls_cert and os.getenv('NUVORA_BEHIND_TLS_PROXY')!='1':
         parser.error('Remote listening requires TLS or NUVORA_BEHIND_TLS_PROXY=1')
+    url=os.getenv('NUVORA_DATABASE_URL','')
     path=Path(args.db)
-    if not path.exists():
+    if not url and not path.exists():
         fd=os.open(path,os.O_CREAT|os.O_WRONLY,0o600)
         os.close(fd)
-    store=Store(str(path))
+    try:
+        store=Store(str(path),url)
+    except (RuntimeError,ValueError) as exc:
+        parser.error(str(exc))
     auth=Auth(store)
     with store.lock:
         exists=store.db.execute('SELECT 1 FROM users LIMIT 1').fetchone()
@@ -402,6 +504,12 @@ def main():
             auth.add_user('default','admin',password,'admin',os.getenv('NUVORA_ALLOW_DEMO_PASSWORD')=='1')
         except Fault as exc:
             parser.error(str(exc))
+    try:
+        config=sso.Config.from_env()
+    except ValueError as exc:
+        parser.error(str(exc))
+    if config:
+        auth.oidc=sso.OIDC(config)
     app=Platform(store,auth)
     if args.demo:
         app.seed({'tenant':'default','username':'admin','role':'admin'})

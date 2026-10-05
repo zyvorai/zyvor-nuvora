@@ -1,9 +1,70 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import { useEffect, useState } from 'react';
-import { Moon, ShieldCheck, Sun } from 'lucide-react';
+import { Moon, Plug, ShieldCheck, Sun } from 'lucide-react';
 import { api, type Row } from '../api';
 import { Gauge } from '../components/charts';
 import { Badge, Card, Skeleton } from '../components/kit';
 import type { Theme } from '../theme';
+
+function Integrations() {
+  const [data, setData] = useState<Row | null>(null);
+  const [checks, setChecks] = useState<Record<string, string>>({});
+  useEffect(() => {
+    api('/api/integrations')
+      .then(setData)
+      .catch(() => setData({ systems: [], presets: [] }));
+  }, []);
+  async function test(id: string) {
+    setChecks((c) => ({ ...c, [id]: 'checking' }));
+    try {
+      await api(`/api/integrations/${id}/test`, {});
+      setChecks((c) => ({ ...c, [id]: 'reachable' }));
+    } catch (e) {
+      setChecks((c) => ({ ...c, [id]: e instanceof Error ? e.message : String(e) }));
+    }
+  }
+  if (!data) return <Skeleton rows={3} label="Loading integrations" />;
+  return (
+    <>
+      <ul className="integration-list">
+        {data.systems.map((s: Row) => (
+          <li key={s.id}>
+            <Plug size={16} aria-hidden="true" />
+            <div>
+              <b>{s.label}</b>
+              <small>{s.role}</small>
+              <small className="muted">
+                {s.configured ? (
+                  <>
+                    <code>{s.host}</code> · credential <code>{s.credential}</code> {s.credential_set ? 'set' : 'not set'}
+                  </>
+                ) : (
+                  <>
+                    Set <code>NUVORA_{String(s.id).toUpperCase()}_URL</code> and <code>{s.credential}</code> in the deployment.
+                  </>
+                )}
+              </small>
+              {checks[s.id] && checks[s.id] !== 'checking' && (
+                <small className={checks[s.id] === 'reachable' ? 'green' : 'red'} role="status">
+                  {checks[s.id]}
+                </small>
+              )}
+            </div>
+            <Badge value={s.configured ? 'configured' : 'not configured'} />
+            {s.configured && (
+              <button type="button" className="btn-secondary compact" onClick={() => test(s.id)} disabled={checks[s.id] === 'checking'}>
+                {checks[s.id] === 'checking' ? 'Testing…' : 'Test'}
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+      <p className="note">
+        Model gateways ({data.presets.map((p: Row) => p.label).join(', ')}) are presets on the Models page. Integration hosts must be on the provider allow-list.
+      </p>
+    </>
+  );
+}
 
 export default function Settings({ principal, theme, onTheme, onPassword }: { principal: Row; theme: Theme; onTheme: (t: Theme) => void; onPassword: () => void }) {
   const admin = principal.role === 'admin';
@@ -137,6 +198,12 @@ export default function Settings({ principal, theme, onTheme, onPassword }: { pr
         )}
         {admin && <p className="note">Provider hosts, TLS and limits come from the server environment. Change them in the deployment, not here.</p>}
       </Card>
+
+      {admin && (
+        <Card title="Integrations" className="span3">
+          <Integrations />
+        </Card>
+      )}
     </div>
   );
 }

@@ -1,11 +1,12 @@
-"""SQLite persistence. Tenant is mandatory on every object lookup."""
+# SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
+"""Persistence on SQLite or PostgreSQL. Tenant is mandatory on every object lookup."""
 import hashlib
 import json
 import secrets
-import sqlite3
-import threading
 import time
 from contextlib import contextmanager
+
+from .db import connect
 
 
 def canonical(value):
@@ -13,56 +14,39 @@ def canonical(value):
 
 
 class Store:
-    def __init__(self, path):
-        self.lock = threading.RLock()
-        self.db = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
-        self.db.row_factory = sqlite3.Row
-        self.db.execute('PRAGMA journal_mode=WAL')
-        self.db.execute('PRAGMA foreign_keys=ON')
-        self.db.execute('PRAGMA busy_timeout=5000')
-        self.db.executescript('''
-        CREATE TABLE IF NOT EXISTS objects (
-          tenant TEXT NOT NULL, kind TEXT NOT NULL, id TEXT NOT NULL,
-          data TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1,
-          created REAL NOT NULL, updated REAL NOT NULL,
-          PRIMARY KEY(tenant,kind,id));
-        CREATE TABLE IF NOT EXISTS users (
-          tenant TEXT NOT NULL, username TEXT NOT NULL, password TEXT NOT NULL,
-          role TEXT NOT NULL, PRIMARY KEY(tenant,username));
-        CREATE TABLE IF NOT EXISTS tokens (
-          digest TEXT PRIMARY KEY, tenant TEXT NOT NULL, username TEXT NOT NULL,
-          role TEXT NOT NULL, expires REAL NOT NULL);
-        CREATE TABLE IF NOT EXISTS audit (
-          seq INTEGER PRIMARY KEY AUTOINCREMENT, tenant TEXT NOT NULL,
-          event TEXT NOT NULL, previous TEXT NOT NULL, digest TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS usage (
-          id TEXT PRIMARY KEY, tenant TEXT NOT NULL, model TEXT NOT NULL,
-          input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL,
-          cost REAL NOT NULL, latency_ms REAL NOT NULL, cached INTEGER NOT NULL,
-          created REAL NOT NULL);
-        CREATE TABLE IF NOT EXISTS cache (
-          tenant TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL,
-          expires REAL NOT NULL, PRIMARY KEY(tenant,key));
-        CREATE TABLE IF NOT EXISTS idempotency (
-          tenant TEXT NOT NULL, key TEXT NOT NULL, fingerprint TEXT NOT NULL,
-          value TEXT NOT NULL, PRIMARY KEY(tenant,key));
-        ''')
-        columns={r['name'] for r in self.db.execute('PRAGMA table_info(tokens)')}
-        for name,ddl in (('id',"TEXT NOT NULL DEFAULT ''"),('kind',"TEXT NOT NULL DEFAULT 'session'"),('label',"TEXT NOT NULL DEFAULT ''"),('created',"REAL NOT NULL DEFAULT 0")):
-            if name not in columns:
-                self.db.execute(f'ALTER TABLE tokens ADD COLUMN {name} {ddl}')
+    def __init__(self, path, url=None):
+        self.db = connect(path, url)
+        self.lock = self.db.lock
+        try:
+            self.db.migrate()
+        except BaseException:
+            self.db.close()
+            raise
 
     @contextmanager
     def transaction(self):
+        """Reentrant: nested blocks join the outermost transaction."""
         with self.lock:
-            self.db.execute('BEGIN IMMEDIATE')
+            if self.db.depth:
+                self.db.depth += 1
+                try:
+                    yield
+                finally:
+                    self.db.depth -= 1
+                return
+            self.db.begin()
+            self.db.depth = 1
             try:
                 yield
             except BaseException:
-                self.db.execute('ROLLBACK')
+                self.db.depth = 0
+                self.db.rollback()
                 raise
-            else:
-                self.db.execute('COMMIT')
+            self.db.depth = 0
+            self.db.commit()
+
+    def close(self):
+        self.db.close()
 
     def list(self, tenant, kind):
         with self.lock:
@@ -91,7 +75,7 @@ class Store:
             if old:
                 self.db.execute('UPDATE objects SET data=?,revision=revision+1,updated=? WHERE tenant=? AND kind=? AND id=?', (canonical(clean),now,tenant,kind,id))
             else:
-                self.db.execute('INSERT INTO objects VALUES (?,?,?,?,?,?,?)', (tenant,kind,id,canonical(clean),1,now,now))
+                self.db.execute('INSERT INTO objects (tenant,kind,id,data,revision,created,updated) VALUES (?,?,?,?,?,?,?)', (tenant,kind,id,canonical(clean),1,now,now))
         return self.get(tenant,kind,id)
 
     def delete(self, tenant, kind, id):
@@ -100,7 +84,8 @@ class Store:
                 raise KeyError('Object not found')
 
     def audit(self, tenant, actor, action, target, detail=None):
-        with self.lock:
+        with self.transaction():
+            self.db.lock_key('audit:'+tenant)
             previous = self.db.execute('SELECT digest FROM audit WHERE tenant=? ORDER BY seq DESC LIMIT 1',(tenant,)).fetchone()
             previous = previous[0] if previous else '0'*64
             event = canonical({'actor':actor,'action':action,'target':target,'detail':detail or {},'time':time.time()})
@@ -126,3 +111,28 @@ class Store:
                 return {'valid':False,'failed_seq':row['seq'],'events':len(rows)}
             previous = row['digest']
         return {'valid':True,'events':len(rows),'tip':previous}
+
+    def claim_job(self, tenant, id, worker):
+        """Atomically move a queued job to running for this worker; None if another worker has it."""
+        with self.transaction():
+            row = self.db.execute("SELECT data FROM objects WHERE tenant=? AND kind='jobs' AND id=?"+self.db.for_update(), (tenant,id)).fetchone()
+            if row is None:
+                return None
+            job = json.loads(row['data'])
+            if job.get('status') != 'queued':
+                return None
+            job.update(status='running', worker=worker)
+            self.db.execute("UPDATE objects SET data=?,revision=revision+1,updated=? WHERE tenant=? AND kind='jobs' AND id=?", (canonical(job),time.time(),tenant,id))
+        return self.get(tenant,'jobs',id)
+
+    def queued_jobs(self):
+        with self.lock:
+            rows = self.db.execute("SELECT tenant,id,data FROM objects WHERE kind='jobs' AND data LIKE ?", ('%"status":"queued"%',)).fetchall()
+        return [(r['tenant'], r['id'], json.loads(r['data'])) for r in rows]
+
+    def heartbeat(self, worker, ttl):
+        now = time.time()
+        with self.transaction():
+            self.db.execute('DELETE FROM workers WHERE id=? OR seen<?', (worker, now-ttl))
+            self.db.execute('INSERT INTO workers (id,seen) VALUES (?,?)', (worker, now))
+            return {r['id'] for r in self.db.execute('SELECT id FROM workers').fetchall()}

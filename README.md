@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/zyvorai/zyvor-nuvora/actions/workflows/ci.yml/badge.svg)](https://github.com/zyvorai/zyvor-nuvora/actions/workflows/ci.yml)
 [![License: Zyvor Production v1.0](https://img.shields.io/badge/License-Zyvor%20Production%20v1.0-orange.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.1.0-informational)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.2.0-informational)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/Python-3.11%2B%20stdlib-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![React](https://img.shields.io/badge/React-console-61DAFB?logo=react&logoColor=black)](web)
 [![Docs](https://img.shields.io/badge/Docs-zyvorai.github.io%2Fzyvor--nuvora-0071e3)](https://zyvorai.github.io/zyvor-nuvora/)
@@ -15,7 +15,7 @@
 
 **A self-hosted AI application platform.** Connect your own model endpoints, ground every answer in cited evidence, run tool-using agents and reviewed workflows, and keep each consequential action behind a different human's approval.
 
-**19 console views** · **4 model adapters** · **Tenant-scoped** · **Author ≠ approver** · **Hash-chained evidence** · **Zero runtime Python deps**
+**19 console views** · **4 model adapters** · **Tenant-scoped** · **Author ≠ approver** · **Hash-chained evidence** · **Zero required Python deps**
 
 📖 **[Read the full docs](https://zyvorai.github.io/zyvor-nuvora/)**: quickstart, concepts, security model, and a product tour.
 
@@ -23,11 +23,12 @@
 
 ---
 
-> **0.1.0 is an evaluation release. It is not Bedrock parity and not a production certification.**
+> **0.2.0 is an evaluation release. It is not Bedrock parity and not a production certification.**
 > - Model invocation works against configured OpenAI-compatible or Ollama endpoints.
-> - An optional boto3 adapter supports Bedrock Converse, without tools.
+> - An optional boto3 adapter supports Bedrock Converse and streaming, without tools.
 > - The bundled offline model is explicitly synthetic.
-> - GPU training, managed model hosting, multi-region HA, classifier-based guardrails, and Keep microVM execution are not implemented.
+> - SSO, PostgreSQL with several replicas, and the Netra/Zyntra/Keep integrations are new and tested against stubs, not yet against every IdP or production install.
+> - GPU training, managed model hosting, multi-region HA, and classifier-based guardrails are not implemented.
 >
 > Check the [capability matrix](docs/CAPABILITIES.md) before relying on any feature.
 
@@ -37,10 +38,11 @@ From [CHANGELOG.md](CHANGELOG.md):
 
 | | |
 |---|---|
-| **Netra-grade console** | The console uses Zyvor's Apple UX contract: light by default with dark one click away, grouped mega-menus, story-tier Overview, and hairline tables. [Contract →](docs/design/APPLE-UX-CONTRACT.md) |
-| **One-command k3s deploy** | `./scripts/deploy-remote.sh HOST USER` builds on the host, imports into k3s, and serves HTTPS on NodePort 30789. [Docs →](docs/deploy.md) |
-| **Direct TLS in Helm** | A persistent self-signed or existing `kubernetes.io/tls` Secret, with HTTPS probes and an optional NodePort. |
-| **Browser smoke against a live host** | 52 Playwright checks across every page, light and dark, at 1440px and 390px, run against the deployed instance. |
+| **Single sign-on** | OIDC code flow with PKCE, bearer JWTs, just-in-time users and group-to-role mapping. [SSO →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/sso) |
+| **PostgreSQL and replicas** | `NUVORA_DATABASE_URL` switches storage. Jobs are leased across workers, and the audit chain stays linear. Includes a SQLite migration script. [Postgres →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/postgres) |
+| **Platform integrations** | Fabric/Gryvia presets with model discovery, Netra evidence tools, Zyntra handoff steps, and Keep sandboxed code with approval. [Integrations →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/integrations) |
+| **Documents and evaluations** | Upload PDF, DOCX, HTML, CSV and more. Evaluations add LLM-judge and grounded cases, plus a case editor with per-case reasons. Live `/v1` streaming. |
+| **One-command k3s deploy** | `./scripts/deploy-remote.sh HOST USER` builds on the host, imports into k3s, serves HTTPS on NodePort 30789, and generates the admin password. [Docs →](docs/deploy.md) |
 
 ---
 
@@ -94,7 +96,7 @@ The same pattern Netra uses: rsync the tree, build on the host with podman, impo
 
 The script prints the result when it finishes:
 - **URL:** `https://HOST:30789`, using a self-signed certificate that persists across redeploys.
-- **Sign in:** `admin` / `Admin@321`, unless you set `NUVORA_ADMIN_PASSWORD`. Change it for anything beyond a demo.
+- **Sign in:** `admin`, with the password the script generates and prints on the first deploy. Set `NUVORA_ADMIN_PASSWORD` to choose one, or `NUVORA_DEMO_PASSWORD=1` for the lab login `Admin@321`.
 
 Flags:
 - `--quick` skips the image build.
@@ -150,18 +152,18 @@ Optional Bedrock access: run `python3 -m pip install '.[aws]'`, then create a Be
 | Area | Runnable behavior |
 |---|---|
 | Models | Catalog, explicit or price-based routing, OpenAI/Ollama adapters, optional Bedrock adapter |
-| Knowledge | Document upsert, chunking, content hashes, BM25 + lexical-vector fusion; optional external semantic embeddings |
-| Agents | Bounded model/tool loop, registered tool schemas, read tools, session memory, human-approved memory writes |
+| Knowledge | File upload (txt/md/json/csv/html/docx, PDF via extra), chunking, content hashes, BM25 + lexical-vector fusion, OpenAI/Ollama embeddings, optional LLM rerank |
+| Agents | Bounded model/tool loop, registered tool schemas, read tools, Netra evidence tools, Keep `run_code` behind approval, session memory, human-approved memory writes |
 | Connectors & actions | Typed admin-registered enterprise APIs; external writes wait for independent exact-argument approval |
-| Workflows | Ordered DAG validation, retrieve/generate/template/condition/extract/review nodes, durable checkpoints |
+| Workflows | Ordered DAG validation, retrieve/generate/template/condition/extract/review/handoff nodes, durable checkpoints, Zyntra handoff |
 | Prompts | Variable validation, optimistic revision edits, retained version snapshots |
-| Evaluation | Contains/excludes suites, scores, release verdicts, comparable-suite regression endpoint |
-| Governance | Tenant isolation, viewer/developer/approver/admin roles, scoped and revocable service tokens, member role management, separate-human approvals |
+| Evaluation | Contains/excludes, LLM-judge and grounded cases, per-case reasons, scores, release verdicts, comparable-suite regression endpoint |
+| Governance | OIDC SSO, tenant isolation, viewer/developer/approver/admin roles, scoped and revocable service tokens, member role management, separate-human approvals |
 | Guardrails | Topic patterns, instruction-override patterns, size limits, email/account redaction; applied to inputs/outputs |
-| Inference operations | Live guardrail-checked streaming in the console, buffered SSE on `/v1`, deterministic cache, batch jobs, token budgets, concurrency caps |
+| Inference operations | Live guardrail-checked streaming in the console and on `/v1`, deterministic cache, batch jobs, token budgets, concurrency caps |
 | Evidence | Job traces, source digests, hash-chained audit with filters, CSV and JSON exports, offline chain verification |
 | Console | Command palette, streaming playground with model compare, resource drawers with history and diff, workflow builder, run inspector with inline approval, usage charts |
-| Delivery | Compiled console, Python SDK/CLI, Docker/Compose, Helm chart, k3s deploy script, GitHub Actions, unit/API/DOM/browser tests |
+| Delivery | SQLite or PostgreSQL, compiled console, Python SDK/CLI, Docker/Compose, release images on ghcr.io, Helm chart with replicas, k3s deploy script, GitHub Actions, unit/API/DOM/browser tests |
 
 ## Develop and test
 
@@ -175,7 +177,7 @@ To run the browser smoke test, install Playwright first, then point it at a runn
 
 ```bash
 npm install --no-save --package-lock=false playwright && npx playwright install chromium --only-shell
-NUVORA_TEST_URL=https://HOST:30789 NUVORA_TEST_PASSWORD='Admin@321' node scripts/browser-smoke.cjs
+NUVORA_TEST_URL=https://HOST:30789 NUVORA_TEST_PASSWORD='YOUR_ADMIN_PASSWORD' node scripts/browser-smoke.cjs
 ```
 
 The smoke test signs in, exercises every page and the evaluate-to-runs flow, verifies the evidence chain, and checks light and dark at 1440px and 390px. It writes its screenshots to `docs/ux/`.
@@ -197,7 +199,7 @@ The README artwork is rendered from HTML: run `./docs/social/build.sh` (see [doc
 ## Repository layout
 
 ```text
-nuvora/             HTTP API, platform services, SQLite, auth, providers, retrieval
+nuvora/             HTTP API, platform services, storage (SQLite/Postgres), auth, SSO, providers, retrieval, integrations
 nuvora/static/      Prebuilt console; included so the Python-only quickstart works
 web/                React/TypeScript console, Apple design tokens, interaction tests
 website/            Docusaurus docs site (GitHub Pages)
@@ -212,6 +214,7 @@ docs/               Architecture, API, operations, deploy, UX contract, screensh
 
 Fabric, Gryvia, Aurora, and Zyntra each have a specific job. Nuvora is the application workspace above them: models, knowledge, prompts, agents, workflows, governance, evaluation, and usage.
 - It connects to their model endpoints through its OpenAI-compatible adapter.
+- It calls Netra for evidence, hands decisions to Zyntra, and runs code in Keep, all behind operator configuration.
 - It doesn't duplicate their VM execution or Kubernetes scheduling engines.
 
 ## License

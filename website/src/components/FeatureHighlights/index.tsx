@@ -13,25 +13,25 @@ const FeatureList: FeatureItem[] = [
   {
     title: 'Your models',
     description:
-      'OpenAI-compatible (vLLM, llama.cpp), Ollama, optional Bedrock, and a labeled offline demo. Remote hosts need HTTPS and an exact allow-list entry; credentials stay in environment variables.',
-    to: '/docs/core-concepts/architecture',
+      'Fabric and Gryvia presets with model discovery, any OpenAI-compatible server, Ollama, optional Bedrock, and a labeled offline demo. Exact host allow-list; credentials stay in environment variables.',
+    to: '/docs/operate/integrations',
   },
   {
     title: 'Cited knowledge',
     description:
-      'Chunked documents with content digests and hybrid BM25 + vector retrieval. Every grounded answer shows the passages it used.',
-    to: '/docs/core-concepts/architecture',
+      'Upload PDF, Word, HTML, Markdown or CSV. Hybrid BM25 + vector retrieval with optional semantic embeddings and LLM rerank. Every grounded answer shows its passages.',
+    to: '/docs/operate/documents-and-evaluations',
   },
   {
     title: 'Agents with scoped tools',
     description:
-      'A bounded model-and-tool loop over registered, typed tool schemas. Memory writes and external actions wait for a person.',
+      'A bounded model-and-tool loop over typed tools, including read-only Netra evidence and Keep sandboxed code. Code, memory writes and external actions wait for a person.',
     to: '/docs/core-concepts/approvals',
   },
   {
     title: 'Reviewed workflows',
     description:
-      'Validated DAGs of retrieve, generate, template, condition, extract and approval steps, with durable checkpoints and pinned revisions.',
+      'Validated DAGs with approval steps and Zyntra handoffs, durable checkpoints and pinned revisions, built visually or as JSON.',
     to: '/docs/core-concepts/approvals',
   },
   {
@@ -55,14 +55,14 @@ const FeatureList: FeatureItem[] = [
   {
     title: 'Usage, cost, evaluation',
     description:
-      'A per-workspace usage ledger with token budgets and concurrency caps, plus evaluation suites with release verdicts.',
-    to: '/docs/core-concepts/architecture',
+      'A usage ledger with token budgets, plus evaluation suites that combine assertions, LLM-judge criteria and groundedness into a release verdict.',
+    to: '/docs/operate/documents-and-evaluations',
   },
   {
-    title: 'Self-hosted, zero deps',
+    title: 'Self-hosted, SSO, scales out',
     description:
-      'A Python standard-library server with a prebuilt React console. Docker, Helm, and a one-command k3s deploy over HTTPS.',
-    to: '/docs/getting-started/deploy',
+      'A standard-library core with optional extras. OIDC single sign-on, SQLite or PostgreSQL with several replicas, Docker, Helm, and a one-command k3s deploy.',
+    to: '/docs/operate/postgres',
   },
 ];
 

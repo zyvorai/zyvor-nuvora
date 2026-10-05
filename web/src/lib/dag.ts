@@ -1,8 +1,9 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 export type Step = { id: string; type: string; depends_on?: string[]; when?: string; [key: string]: unknown };
 export type Placed = { id: string; type: string; layer: number; row: number };
 export type Edge = { from: string; to: string; conditional: boolean };
 
-export const STEP_TYPES = ['retrieve', 'generate', 'template', 'condition', 'extract', 'action', 'approval'] as const;
+export const STEP_TYPES = ['retrieve', 'generate', 'template', 'condition', 'extract', 'action', 'approval', 'handoff'] as const;
 
 // Layer = longest path from "input". Rows are assigned in step order within a layer.
 export function layout(steps: Step[]): { nodes: Placed[]; edges: Edge[]; layers: number; rows: number } {

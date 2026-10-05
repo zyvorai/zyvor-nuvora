@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import { useEffect, useRef, useState, type FormEvent, type ReactNode, type RefObject } from 'react';
 import { Bell, Check, KeyRound, Keyboard, LogOut, Settings, ShieldCheck } from 'lucide-react';
 import { ago, api, type Row } from '../api';

@@ -1,3 +1,11 @@
+{{- $postgres := .Values.database.urlSecret }}
+{{- if and (gt (int .Values.replicas) 1) (not $postgres) }}
+{{- fail "replicas > 1 needs PostgreSQL: set database.urlSecret (SQLite is single-writer)" }}
+{{- end }}
+{{- if and (gt (int .Values.replicas) 1) .Values.oidc.issuer (not .Values.oidc.clientSecret) }}
+{{- fail "replicas > 1 with SSO needs oidc.clientSecret so every replica can verify login state" }}
+{{- end }}
+{{- if not $postgres }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -11,6 +19,7 @@ spec:
     requests:
       storage: {{ .Values.storage.size }}
 ---
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -20,8 +29,12 @@ metadata:
     app.kubernetes.io/name: nuvora
     app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 spec:
-  replicas: 1
+  replicas: {{ int .Values.replicas }}
+  {{- if $postgres }}
+  strategy: {type: RollingUpdate, rollingUpdate: {maxUnavailable: 0, maxSurge: 1}}
+  {{- else }}
   strategy: {type: Recreate}
+  {{- end }}
   selector:
     matchLabels: {app: {{ .Release.Name }}}
   template:
@@ -62,8 +75,29 @@ spec:
         {{- if .Values.allowDemoPassword }}
         - {name: NUVORA_ALLOW_DEMO_PASSWORD, value: "1"}
         {{- end }}
+        {{- if $postgres }}
+        - name: NUVORA_DATABASE_URL
+          valueFrom:
+            secretKeyRef: {name: {{ $postgres | quote }}, key: url}
+        {{- end }}
         - name: NUVORA_PROVIDER_HOSTS
           value: {{ .Values.providerHosts | quote }}
+        {{- with .Values.oidc }}
+        {{- if .issuer }}
+        - {name: NUVORA_OIDC_ISSUER, value: {{ .issuer | quote }}}
+        - {name: NUVORA_OIDC_CLIENT_ID, value: {{ .clientId | quote }}}
+        {{- if .clientSecret }}
+        - name: NUVORA_OIDC_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef: {name: {{ .clientSecret | quote }}, key: client-secret}
+        {{- end }}
+        {{- range $key, $env := dict "redirectUrl" "NUVORA_OIDC_REDIRECT_URL" "scopes" "NUVORA_OIDC_SCOPES" "rolesClaim" "NUVORA_OIDC_ROLES_CLAIM" "roleMap" "NUVORA_OIDC_ROLE_MAP" "defaultRole" "NUVORA_OIDC_DEFAULT_ROLE" "tenantClaim" "NUVORA_OIDC_TENANT_CLAIM" "identityClaim" "NUVORA_OIDC_IDENTITY_CLAIM" "audience" "NUVORA_OIDC_AUDIENCE" "label" "NUVORA_OIDC_LABEL" }}
+        {{- with index $.Values.oidc $key }}
+        - {name: {{ $env }}, value: {{ . | quote }}}
+        {{- end }}
+        {{- end }}
+        {{- end }}
+        {{- end }}
         - {name: PYTHONDONTWRITEBYTECODE, value: "1"}
         resources: {{ toYaml .Values.resources | nindent 10 }}
         securityContext:
@@ -82,7 +116,11 @@ spec:
         {{- end }}
       volumes:
       - name: data
+        {{- if $postgres }}
+        emptyDir: {}
+        {{- else }}
         persistentVolumeClaim: {claimName: {{ .Release.Name }}-data}
+        {{- end }}
       - name: tmp
         emptyDir: {}
       {{- if .Values.tls.existingSecret }}

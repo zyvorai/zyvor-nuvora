@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 set -euo pipefail
 # Run locally after reviewing the repository and signing in with gh.
 command -v gh >/dev/null || { echo 'Install GitHub CLI and run gh auth login first.' >&2; exit 1; }

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import { useState } from 'react';
 
 // Pure-SVG charts. Colours come from CSS tokens via currentColor and classes.

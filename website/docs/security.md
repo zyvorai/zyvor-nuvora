@@ -1,5 +1,5 @@
 ---
-sidebar_position: 3
+sidebar_position: 4
 ---
 
 # Security model
@@ -15,6 +15,10 @@ Nuvora is an evaluation release. This page says what it enforces and what it doe
   - Mutations need a CSRF token and pass Origin validation.
   - Bearer tokens are scoped and stored only as digests. Owners and admins can list and revoke them, and demotion below developer revokes them.
   - Changing your password signs out your other sessions.
+- **Single sign-on.**
+  - OIDC sign-in uses the code flow with PKCE and a signed, short-lived state cookie. The ID token's issuer, audience, expiry and nonce are checked.
+  - Bearer JWTs are signature-verified against the issuer's JWKS, with asymmetric algorithms only.
+  - SSO users can't use or change a password, and an SSO sign-in never takes over a local account.
 - **Passwords.**
   - Passwords need 12–256 characters and are stored as PBKDF2-SHA256 hashes.
   - The only exception is the deploy demo password for the bootstrap administrator, and only when it's explicitly allowed.
@@ -31,9 +35,10 @@ Nuvora is an evaluation release. This page says what it enforces and what it doe
 
 - **The host is trusted.** A host administrator can read or change the database. The audit chain is unsigned, so anchor chain tips externally if you need independent proof.
 - **Guardrails are pattern-based.** They block configured topics and some instruction-override patterns and redact emails and account numbers. They aren't robust jailbreak prevention.
-- **No sandbox.** The server isn't an isolated agent runtime. Keep microVM execution is roadmap work, and no untrusted code or browser tools are registered.
+- **Code runs only in Keep.** The server itself isn't an isolated agent runtime. `run_code` exists only when Keep is configured, runs in a FluxVM sandbox without network, and needs a different person's approval of the exact code. There are no browser tools.
 - **Your providers see your data.** External model providers receive whatever content is sent to them, under their own terms.
-- **No encryption at rest.** SQLite isn't encrypted by Nuvora, so use an encrypted volume.
+- **No encryption at rest.** Neither SQLite nor PostgreSQL data is encrypted by Nuvora. Use an encrypted volume or database encryption, and `sslmode=require` for PostgreSQL.
+- **Per-process limits.** With several replicas, the four-concurrent-calls limit and in-flight budget reservations apply per replica.
 
 ## Reporting
 

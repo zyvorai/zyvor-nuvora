@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import { Cpu, FlaskConical, Plug } from 'lucide-react';
 import { api, download, money, type Row } from '../api';
 import ResourceTable from '../components/ResourceTable';

@@ -1,20 +1,22 @@
-import { useState, type FormEvent } from 'react';
-import { ArrowRight } from 'lucide-react';
-import type { Row } from '../api';
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
+import { useEffect, useState, type FormEvent } from 'react';
+import { ArrowRight, Search } from 'lucide-react';
+import { api, type Row } from '../api';
 import type { Collections } from '../lib/types';
 import { Field } from './kit';
 import { WorkflowBuilder } from './WorkflowCanvas';
+import CaseEditor, { cleanCase, type EvalCase } from './CaseEditor';
 import { topoOrder, type Step } from '../lib/dag';
 
 const KEYS: Record<string, string[]> = {
   actions: ['url', 'method', 'key_env', 'description'],
   models: ['provider', 'base_url', 'upstream_model', 'key_env', 'region', 'input_price', 'output_price', 'capability', 'enabled'],
-  knowledge: ['embedding_model'],
+  knowledge: ['embedding_model', 'rerank_model'],
   agents: ['model', 'system_prompt', 'knowledge_ids', 'tools', 'max_steps'],
   prompts: ['template'],
   policies: ['redact_pii', 'detect_injection', 'max_chars', 'daily_tokens', 'blocked_topics'],
   recipes: ['model', 'method', 'dataset', 'rank', 'epochs'],
-  evaluations: ['model', 'pass_threshold'],
+  evaluations: ['model', 'pass_threshold', 'judge_model', 'knowledge_ids'],
   workflows: [],
 };
 
@@ -66,11 +68,11 @@ export default function CreateForm({
   const sampleJSON: Record<string, unknown> = {
     actions: existing?.input_schema ?? { type: 'object', properties: { query: { type: 'string' } }, required: [] },
     workflows: existing?.steps ?? [{ id: 'answer', type: 'generate', model: firstModel, depends_on: ['input'] }],
-    evaluations: existing?.cases ?? [{ input: 'Explain private AI', contains: ['AI'], excludes: [] }],
+    evaluations: existing?.cases ?? [{ input: 'Explain private AI', contains: ['AI'], excludes: [], judge: { criteria: 'Explains that data stays inside the operator boundary.', min_score: 0.7 } }],
   };
   const [json, setJSON] = useState(JSON.stringify(sampleJSON[kind] ?? sampleJSON.evaluations, null, 2));
   const [error, setError] = useState('');
-  const [visual, setVisual] = useState(kind === 'workflows');
+  const [visual, setVisual] = useState(kind === 'workflows' || kind === 'evaluations');
   const steps: Step[] | null = (() => {
     try {
       const v = JSON.parse(json);
@@ -80,6 +82,35 @@ export default function CreateForm({
     }
   })();
   const set = (k: string, v: unknown) => setData({ ...data, [k]: v });
+  const [tools, setTools] = useState<string[]>(['knowledge_search', 'list_models', 'memory_read', 'memory_write']);
+  const [presets, setPresets] = useState<Row[]>([]);
+  const [found, setFound] = useState<Row[] | null>(null);
+  const [discovering, setDiscovering] = useState(false);
+  useEffect(() => {
+    if (kind === 'agents')
+      api('/api/tools')
+        .then((r) => setTools(Object.keys(r.tools)))
+        .catch(() => undefined);
+    if (kind === 'models' && !existing)
+      api('/api/models/presets')
+        .then((r) => setPresets(r.presets))
+        .catch(() => undefined);
+  }, [kind, existing]);
+
+  async function discover() {
+    setDiscovering(true);
+    setError('');
+    try {
+      const r = await api('/api/models/discover', { provider: data.provider, base_url: data.base_url, key_env: data.key_env || undefined });
+      setFound(r.models);
+      if (r.models.length && !data.upstream_model) setData({ ...data, upstream_model: r.models[0].id, capability: r.models[0].capability });
+    } catch (err) {
+      setError(String(err));
+      setFound(null);
+    } finally {
+      setDiscovering(false);
+    }
+  }
 
   function field(k: string, label: string, type = 'text') {
     return (
@@ -107,7 +138,10 @@ export default function CreateForm({
         const parsed = JSON.parse(json);
         body.steps = (Array.isArray(parsed) && topoOrder(parsed)) || parsed;
       }
-      if (kind === 'evaluations') body.cases = JSON.parse(json);
+      if (kind === 'evaluations') {
+        const parsed = JSON.parse(json);
+        body.cases = Array.isArray(parsed) ? parsed.map((c: EvalCase) => cleanCase(c)) : parsed;
+      }
       save(body);
     } catch (err) {
       setError(String(err));
@@ -148,6 +182,25 @@ export default function CreateForm({
       )}
       {kind === 'models' && (
         <>
+          {presets.length > 0 && (
+            <Field label="Start from a preset">
+              <select
+                defaultValue=""
+                onChange={(e) => {
+                  const pr = presets.find((x) => x.id === e.target.value);
+                  if (pr) setData({ ...data, provider: pr.provider, base_url: pr.base_url, key_env: pr.key_env, name: data.name || pr.label });
+                  setFound(null);
+                }}
+              >
+                <option value="">Custom</option>
+                {presets.map((pr) => (
+                  <option key={pr.id} value={pr.id}>
+                    {pr.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
           <div className="form-grid">
             <Field label="Provider">
               <select value={data.provider} onChange={(e) => set('provider', e.target.value)}>
@@ -164,7 +217,32 @@ export default function CreateForm({
             </Field>
           </div>
           {data.provider !== 'demo' && data.provider !== 'bedrock' && field('base_url', 'Base URL · host must be allowed by the operator')}
-          {field('upstream_model', 'Upstream model identifier')}
+          {found && found.length > 0 ? (
+            <Field label="Upstream model">
+              <select
+                value={data.upstream_model}
+                onChange={(e) => {
+                  const m = found.find((x) => x.id === e.target.value);
+                  setData({ ...data, upstream_model: e.target.value, capability: m?.capability || data.capability });
+                }}
+              >
+                {found.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.id} · {m.capability}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          ) : (
+            field('upstream_model', 'Upstream model identifier')
+          )}
+          {(data.provider === 'openai' || data.provider === 'ollama') && (
+            <button type="button" className="btn-secondary compact" onClick={discover} disabled={discovering || !data.base_url}>
+              <Search size={14} />
+              {discovering ? 'Discovering…' : 'Discover models from this endpoint'}
+            </button>
+          )}
+          {found && !found.length && <p className="note">The endpoint answered but listed no models.</p>}
           {data.provider === 'bedrock' ? field('region', 'AWS region') : field('key_env', 'Secret environment reference (optional)')}
           <div className="form-grid">
             {field('input_price', 'USD / million input tokens', 'number')}
@@ -190,7 +268,42 @@ export default function CreateForm({
           </select>
         </Field>
       )}
+      {kind === 'knowledge' && (
+        <Field label="Rerank model (optional)">
+          <select value={data.rerank_model || ''} onChange={(e) => set('rerank_model', e.target.value)}>
+            <option value="">No rerank · fused BM25 order</option>
+            {chatModels.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
       {['agents', 'recipes', 'evaluations'].includes(kind) && modelSelect}
+      {kind === 'evaluations' && (
+        <div className="form-grid">
+          <Field label="Judge model (defaults to the model under test)">
+            <select value={data.judge_model || ''} onChange={(e) => set('judge_model', e.target.value)}>
+              <option value="">Same as model under test</option>
+              {chatModels.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Knowledge for grounded cases">
+            <select multiple value={data.knowledge_ids} onChange={(e) => set('knowledge_ids', Array.from(e.target.selectedOptions).map((o) => o.value))}>
+              {(collections.knowledge || []).map((k) => (
+                <option key={k.id} value={k.id}>
+                  {k.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+      )}
       {kind === 'agents' && (
         <>
           <Field label="System instruction">
@@ -210,7 +323,7 @@ export default function CreateForm({
             </select>
           </Field>
           <div className="check-list">
-            {['knowledge_search', 'list_models', 'memory_read', 'memory_write', ...(collections.actions || []).map((a) => 'action_' + a.id)].map((t) => (
+            {[...tools, ...(collections.actions || []).map((a) => 'action_' + a.id)].map((t) => (
               <label key={t}>
                 <input
                   type="checkbox"
@@ -270,10 +383,10 @@ export default function CreateForm({
           <p className="note">Configuration export only. No GPU job is executed.</p>
         </>
       )}
-      {kind === 'workflows' && (
-        <div className="tabs" role="tablist" aria-label="Workflow editor">
+      {(kind === 'workflows' || kind === 'evaluations') && (
+        <div className="tabs" role="tablist" aria-label={kind === 'workflows' ? 'Workflow editor' : 'Case editor'}>
           <button type="button" role="tab" aria-selected={visual} onClick={() => steps && setVisual(true)} disabled={!steps}>
-            Visual builder
+            {kind === 'workflows' ? 'Visual builder' : 'Case editor'}
           </button>
           <button type="button" role="tab" aria-selected={!visual} onClick={() => setVisual(false)}>
             JSON
@@ -281,7 +394,13 @@ export default function CreateForm({
         </div>
       )}
       {kind === 'workflows' && visual && steps && <WorkflowBuilder steps={steps} collections={collections} onChange={(next) => setJSON(JSON.stringify(next, null, 2))} />}
-      {['evaluations', 'workflows'].includes(kind) && !(kind === 'workflows' && visual && steps) && (
+      {kind === 'evaluations' && visual && steps && (
+        <>
+          <CaseEditor cases={steps as unknown as EvalCase[]} hasKnowledge={(data.knowledge_ids || []).length > 0} onChange={(next) => setJSON(JSON.stringify(next, null, 2))} />
+          {field('pass_threshold', 'Required pass fraction (0–1)', 'number')}
+        </>
+      )}
+      {['evaluations', 'workflows'].includes(kind) && !(visual && steps) && (
         <>
           <Field label={kind === 'workflows' ? 'Workflow steps (JSON)' : 'Test cases (JSON)'}>
             <textarea className="code-input" rows={12} value={json} onChange={(e) => setJSON(e.target.value)} required />
@@ -289,8 +408,8 @@ export default function CreateForm({
           {kind === 'evaluations' && field('pass_threshold', 'Required pass fraction (0–1)', 'number')}
           <p className="note">
             {kind === 'workflows'
-              ? 'Steps: retrieve, generate, template, condition, approval, extract. Dependencies must precede each step.'
-              : 'Assertions use contains / excludes. Inspect run evidence for the release verdict.'}
+              ? 'Steps: retrieve, generate, template, condition, approval, extract, action, handoff (Zyntra). Dependencies must precede each step.'
+              : 'Each case can combine contains / excludes assertions, an LLM judge with criteria and min_score, and grounded: true (needs knowledge). Inspect run evidence for per-case reasons.'}
           </p>
         </>
       )}

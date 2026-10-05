@@ -14,13 +14,15 @@ python3 -m nuvora.server
 
 On k3s, pass the allow-list to the deploy script instead: `NUVORA_PROVIDER_HOSTS=... ./scripts/deploy-remote.sh HOST USER`.
 
+In the console, **Models → Add model** offers presets for the Fabric AI gateway, Gryvia, vLLM and Ollama. **Discover models from this endpoint** then lists what the endpoint serves. See [Zyvor platform integrations](../operate/integrations.md).
+
 ## Adapters
 
 | Provider | Use it for | Notes |
 |---|---|---|
 | `openai` | vLLM, llama.cpp, Fabric, Gryvia, any OpenAI-compatible server | Supports tool calls; use it for agents |
-| `ollama` | Native Ollama at `http://127.0.0.1:11434` | For agents, use Ollama's `/v1` endpoint with `openai` |
-| `bedrock` | AWS Bedrock Converse | `pip install '.[aws]'`; standard AWS credential chain; no tools |
+| `ollama` | Native Ollama at `http://127.0.0.1:11434`, chat and `/api/embed` embeddings | For agents, use Ollama's `/v1` endpoint with `openai` |
+| `bedrock` | AWS Bedrock Converse and ConverseStream | `pip install '.[aws]'`; standard AWS credential chain; no tools |
 | `demo` | Offline evaluation | Synthetic, and always labeled |
 
 ## Rules the server enforces

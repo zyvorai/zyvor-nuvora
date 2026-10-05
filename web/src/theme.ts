@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 export type Theme = 'light' | 'dark';
 
 const STORAGE_KEY = 'nuvora-theme';

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 export type DiffLine = { op: 'same' | 'add' | 'del'; text: string };
 
 // Line diff by longest common subsequence; inputs are small (pretty-printed resources).

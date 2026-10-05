@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 """Small API client using a bearer token supplied through environment."""
 import argparse
 import json

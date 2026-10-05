@@ -108,7 +108,7 @@ function TrustBand() {
               and other non-production use; production use needs a commercial
               license. CI runs on every push: backend tests on Python
               3.11–3.13, console typecheck, tests and build, Helm lint and
-              render, shellcheck, and a real-browser smoke test. 0.1.0 is an
+              render, shellcheck, and a real-browser smoke test. 0.2.0 is an
               evaluation release, and the capability matrix says exactly what
               isn't built yet.
             </p>

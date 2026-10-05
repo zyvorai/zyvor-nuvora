@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import { Gauge, Play } from 'lucide-react';
 import { api, type Row } from '../api';
 import { AreaChart, Sparkline } from '../components/charts';
@@ -42,7 +43,7 @@ export default function Evaluations({ rows, jobs = [], canWrite, act, onQueued }
       columns={['name', 'model', 'cases', 'pass_threshold']}
       emptyIcon={Gauge}
       emptyTitle="Measure before you promote"
-      emptyText="An evaluation suite checks answers for required and forbidden phrases, then gives a release verdict."
+      emptyText="An evaluation suite checks answers with phrase assertions, an LLM judge and groundedness against your knowledge, then gives a release verdict."
       renderAction={(r) => {
         const runs = scoreHistory(jobs, r.id);
         const last = runs[runs.length - 1]?.result;

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import hashlib
 import hmac
 import ipaddress
@@ -46,8 +47,8 @@ def validate_url(url, allowed_hosts):
 class Auth:
     def __init__(self, store):
         self.store=store
-        self.failures={}
         self.dummy=password_hash('unmatched-'+secrets.token_hex(16))
+        self.oidc=None
 
     def add_user(self, tenant, username, password, role, allow_demo_password=False):
         if role not in ROLES or not re.fullmatch(r'[a-zA-Z0-9_.-]{1,64}', username) or not re.fullmatch(r'[a-zA-Z0-9_.-]{1,64}',tenant):
@@ -56,22 +57,48 @@ class Auth:
         if (len(password)<12 and not demo) or len(password)>256:
             raise Fault('Passwords must contain 12–256 characters')
         with self.store.lock:
-            self.store.db.execute('INSERT INTO users VALUES (?,?,?,?)',(tenant,username,password_hash(password),role))
+            self.store.db.execute('INSERT INTO users (tenant,username,password,role) VALUES (?,?,?,?)',(tenant,username,password_hash(password),role))
 
     def login(self, tenant, username, password):
         key=(tenant,username)
+        now=time.time()
         with self.store.lock:
-            attempts=[t for t in self.failures.get(key,[]) if t>time.time()-300]
-            if len(attempts)>=10:
+            attempts=self.store.db.execute('SELECT COUNT(*) FROM login_failures WHERE tenant=? AND username=? AND at>?',(str(tenant)[:64],str(username)[:64],now-300)).fetchone()[0]
+            if attempts>=10:
                 raise Fault('Too many login attempts; try in five minutes',429)
             row=self.store.db.execute('SELECT * FROM users WHERE tenant=? AND username=?',key).fetchone()
             ok=password_matches(password,row['password'] if row else self.dummy)
-            if not ok or not row:
-                self.failures[key]=attempts+[time.time()]
+            if not ok or not row or row['identity']:
+                self.store.db.execute('DELETE FROM login_failures WHERE at<?',(now-300,))
+                self.store.db.execute('INSERT INTO login_failures (tenant,username,at) VALUES (?,?,?)',(str(tenant)[:64],str(username)[:64],now))
                 raise Fault('Wrong tenant, username or password',401)
-            self.failures.pop(key,None)
+            self.store.db.execute('DELETE FROM login_failures WHERE tenant=? AND username=?',(tenant,username))
             token=self._insert(tenant,username,row['role'],8*3600,'session')
         self.store.audit(tenant,username,'session.created',username)
+        return token
+
+    def sso_login(self, tenant, username, role, subject):
+        """Create or update a just-in-time SSO user, sync its role from the identity provider and open a session."""
+        actor='oidc:'+username
+        with self.store.transaction():
+            row=self.store.db.execute('SELECT role,identity FROM users WHERE tenant=? AND username=?',(tenant,username)).fetchone()
+            if row and row['identity']!=subject:
+                raise Fault('A local account already uses this username; ask an administrator to rename it',409)
+            if not row:
+                # Unusable password: SSO users never sign in with one.
+                self.store.db.execute('INSERT INTO users (tenant,username,password,role,identity) VALUES (?,?,?,?,?)',
+                                      (tenant,username,password_hash(secrets.token_urlsafe(32)),role,subject))
+            elif row['role']!=role:
+                self.store.db.execute('UPDATE users SET role=? WHERE tenant=? AND username=?',(role,tenant,username))
+                self.store.db.execute("UPDATE tokens SET role=? WHERE tenant=? AND username=? AND kind='session'",(role,tenant,username))
+                if role not in ('admin','developer'):
+                    self.store.db.execute("DELETE FROM tokens WHERE tenant=? AND username=? AND kind='service'",(tenant,username))
+            token=self._insert(tenant,username,role,8*3600,'session')
+        if not row:
+            self.store.audit(tenant,actor,'user.provisioned',username,{'role':role,'source':'oidc'})
+        elif row['role']!=role:
+            self.store.audit(tenant,actor,'user.role_synced',username,{'from':row['role'],'to':role})
+        self.store.audit(tenant,actor,'session.created',username,{'source':'oidc'})
         return token
 
     def _insert(self, tenant, username, role, lifetime, kind, label=''):
@@ -120,6 +147,9 @@ class Auth:
             raise Fault('Passwords must contain 12–256 characters')
         with self.store.lock:
             row=self.store.db.execute('SELECT password FROM users WHERE tenant=? AND username=?',(tenant,username)).fetchone()
+            sso=self.store.db.execute('SELECT identity FROM users WHERE tenant=? AND username=?',(tenant,username)).fetchone()
+            if sso and sso['identity']:
+                raise Fault('This account is managed by your identity provider',409)
             if not row or not password_matches(current if isinstance(current,str) else '',row['password']):
                 raise Fault('Current password is incorrect',403)
             if new==current:
@@ -166,6 +196,9 @@ class Auth:
         self.store.audit(principal['tenant'],principal['username'],'user.removed',username)
 
     def principal(self, token):
+        if self.oidc and token.count('.')==2:
+            tenant,username,role,_=self.oidc.identity(self.oidc.verify(token))
+            return {'tenant':tenant,'username':username,'role':role,'source':'oidc'}
         with self.store.lock:
             row=self.store.db.execute('SELECT * FROM tokens WHERE digest=? AND expires>?',(hashlib.sha256(token.encode()).hexdigest(),time.time())).fetchone()
         if not row:

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Plus, X } from 'lucide-react';
 import { api, setCSRF, type Row } from './api';
@@ -46,7 +47,7 @@ const pageHero: Partial<Record<Page, { title: string; lede: string; tint?: HeroT
   prompts: { title: 'Version the instructions that matter.', lede: 'Templates with declared variables, optimistic revision edits and retained snapshots.' },
   recipes: { title: 'Prepare your next model.', lede: 'Export LoRA, QLoRA, distillation and quantization recipes for an external trainer. No GPU job runs here.', tint: 'amber' },
   jobs: { title: 'Every step, in view.', lede: 'Agent, workflow, evaluation and batch runs with their tool traces, checkpoints and exportable evidence.', tint: 'green' },
-  evaluations: { title: 'Measure before you promote.', lede: 'Contains and excludes suites with pass thresholds and release verdicts, comparable across revisions.', tint: 'green' },
+  evaluations: { title: 'Measure before you promote.', lede: 'Phrase assertions, LLM-judge criteria and groundedness checks with pass thresholds and release verdicts, comparable across revisions.', tint: 'green' },
   batches: { title: 'Run many prompts as one.', lede: 'Queue up to 100 prompts as one durable run. Each item records its own success or failure.' },
   approvals: { title: 'The decision stays with you.', lede: 'Exact actions, their proposer, expiry and fingerprint. An author can never approve their own proposal.', tint: 'red' },
   policies: { title: 'A consistent boundary for every model.', lede: 'Topic, instruction-override, size and PII rules applied to inputs and outputs, with a daily token budget.', tint: 'red' },
@@ -271,7 +272,7 @@ function Console() {
     ),
     playground: <Playground models={collections.models || []} knowledge={collections.knowledge || []} canWrite={canWrite} act={act} principal={principal} seed={askSeed} />,
     models: <Models rows={rows} />,
-    knowledge: <Knowledge rows={rows} canWrite={canWrite} act={act} />,
+    knowledge: <Knowledge rows={rows} canWrite={canWrite} act={act} refresh={refresh} />,
     agents: <Agents rows={rows} canWrite={canWrite} act={act} />,
     actions: <Actions rows={rows} />,
     workflows: <Workflows rows={rows} />,
@@ -354,7 +355,7 @@ function Console() {
         <footer className="app-footer">
           <span>Nuvora · Zyvor Platform</span>
           <span>Private by deployment. Accountable by design.</span>
-          <span>Evaluation release · 0.1.0</span>
+          <span>Evaluation release · 0.2.0</span>
         </footer>
       </main>
       {drawerRow && (

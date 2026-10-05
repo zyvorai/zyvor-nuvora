@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import {afterEach,describe,expect,it,vi} from 'vitest';
 import {api,money,setCSRF} from './api';
 afterEach(()=>vi.unstubAllGlobals());

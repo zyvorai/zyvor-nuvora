@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { ArrowRight, CornerDownLeft, FileText, Keyboard, LogOut, MoonStar, Plus, Search, Sparkles, X } from 'lucide-react';
 import type { Row } from '../api';

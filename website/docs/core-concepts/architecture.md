@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # Architecture
 
-Nuvora is a Python standard-library HTTP server with SQLite storage and a single background worker. The same origin serves a compiled React console.
+Nuvora is a Python standard-library HTTP server with a background worker and a compiled React console on the same origin. It stores data in SQLite by default, or in PostgreSQL for several replicas. Optional extras add PDF parsing (`pdf`), SSO bearer verification (`sso`), PostgreSQL (`postgres`) and Bedrock (`aws`); the container image bundles all of them.
 
 ![How a request flows through Nuvora](/readme-how-it-works.jpg)
 
@@ -20,12 +20,12 @@ Nuvora is a Python standard-library HTTP server with SQLite storage and a single
 
 ## Storage
 
-`Store` uses SQLite in WAL mode behind a process-local lock.
+`Store` talks to a small adapter (`nuvora/db.py`): SQLite in WAL mode, or PostgreSQL when `NUVORA_DATABASE_URL` is set. A `schema_version` table tracks migrations. On PostgreSQL, jobs are claimed with `FOR UPDATE SKIP LOCKED`, audit appends are serialised per tenant with an advisory lock, and the login throttle is shared. See [PostgreSQL and replicas](../operate/postgres.md).
 - Transactions combine state transitions with their audit events.
 - Edits require the expected revision, and versions keep the edited snapshot.
 - Re-ingesting a document atomically replaces its chunks, so stale text is never searched.
 
-The database isn't encrypted by Nuvora: use an encrypted volume. Back it up with the SQLite backup API.
+The database isn't encrypted by Nuvora: use an encrypted volume. Back up SQLite with its backup API, and PostgreSQL with your usual tooling.
 
 ## Retrieval
 

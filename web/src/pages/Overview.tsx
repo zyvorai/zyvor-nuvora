@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import { Activity, ArrowRight, BookOpen, Bot, Cpu, KeyRound, ShieldCheck, Wallet } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api, money, time, type Row } from '../api';

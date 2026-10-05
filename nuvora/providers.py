@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 """Operator-configured providers; no unrestricted URL tools."""
 import json
 import os
@@ -71,13 +72,9 @@ class Providers:
                 return {'content':'','tool_calls':[{'id':'demo-call','type':'function','function':{'name':name,'arguments':json.dumps(args)}}],'usage':{'prompt_tokens':len(text)//4+1,'completion_tokens':10},'evidence_class':'synthetic'}
             return {'content':'[OFFLINE DEMO — no model inference] '+text[:1800],'tool_calls':[],'usage':{'prompt_tokens':sum(len(str(m)) for m in messages)//4+1,'completion_tokens':len(text)//4+12},'evidence_class':'synthetic'}
         if kind=='bedrock':
-            try:
-                import boto3
-            except ImportError as exc:
-                raise Fault('Install nuvora[aws] for the Bedrock provider',503) from exc
             if tools:
                 raise Fault('Bedrock tool calling is not supported in this release; use an OpenAI-compatible agent model',422)
-            client=boto3.client('bedrock-runtime',region_name=model.get('region','us-east-1'))
+            client=self._bedrock_client(model)
             system=[{'text':m['content']} for m in messages if m['role']=='system']
             history=[{'role':m['role'],'content':[{'text':m['content']}]} for m in messages if m['role'] in ('user','assistant')]
             try:
@@ -118,7 +115,10 @@ class Providers:
         """Yield {'delta': text} pieces, then {'usage': {...}, 'evidence_class': ...}."""
         self.validate(model)
         kind=model['provider']
-        if kind in ('demo','bedrock'):
+        if kind=='bedrock':
+            yield from self._bedrock_stream(model,messages,max_tokens,temperature)
+            return
+        if kind=='demo':
             result=self.chat(model,messages,None,max_tokens,temperature)
             words=result['content'].split(' ')
             pause=min(.03,1.2/max(1,len(words))) if kind=='demo' else 0
@@ -164,10 +164,49 @@ class Providers:
                     yield {'delta':text}
         yield {'usage':usage,'evidence_class':'provider'}
 
+    def _bedrock_client(self,model):
+        try:
+            import boto3
+        except ImportError as exc:
+            raise Fault('Install nuvora[aws] for the Bedrock provider',503) from exc
+        return boto3.client('bedrock-runtime',region_name=model.get('region','us-east-1'))
+
+    def _bedrock_stream(self,model,messages,max_tokens,temperature):
+        client=self._bedrock_client(model)
+        system=[{'text':m['content']} for m in messages if m['role']=='system']
+        history=[{'role':m['role'],'content':[{'text':m['content']}]} for m in messages if m['role'] in ('user','assistant')]
+        try:
+            raw=client.converse_stream(modelId=model['upstream_model'],messages=history,system=system,inferenceConfig={'maxTokens':max_tokens,'temperature':temperature})
+        except Exception as exc:
+            raise Fault('Bedrock invocation failed',502) from exc
+        usage={}
+        try:
+            for event in raw['stream']:
+                text=event.get('contentBlockDelta',{}).get('delta',{}).get('text')
+                if text:
+                    yield {'delta':text}
+                if 'metadata' in event:
+                    u=event['metadata'].get('usage',{})
+                    usage={'prompt_tokens':u.get('inputTokens',0),'completion_tokens':u.get('outputTokens',0)}
+                for key in ('internalServerException','modelStreamErrorException','throttlingException','validationException','serviceUnavailableException'):
+                    if key in event:
+                        raise Fault('Bedrock stream failed',502)
+        except Fault:
+            raise
+        except Exception as exc:
+            raise Fault('Bedrock stream failed',502) from exc
+        yield {'usage':usage,'evidence_class':'provider'}
+
     def embed(self,model,texts):
-        if model['provider']!='openai':
-            raise Fault('Embedding models require an OpenAI-compatible provider')
+        if model['provider'] not in ('openai','ollama'):
+            raise Fault('Embedding models require an OpenAI-compatible or Ollama provider')
         self.validate(model)
+        if model['provider']=='ollama':
+            raw=post_json(model['base_url'].rstrip('/')+'/api/embed',{'model':model['upstream_model'],'input':texts},self._auth(model),self.allowed_hosts)
+            vectors=raw.get('embeddings') or []
+            if len(vectors)!=len(texts):
+                raise Fault('Embedding provider returned the wrong number of vectors',502)
+            return vectors
         headers={}
         if model.get('key_env'):
             key=os.getenv(model['key_env'])

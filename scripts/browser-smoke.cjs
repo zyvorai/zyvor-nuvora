@@ -1,8 +1,10 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 // End-to-end console smoke against a running server (local or deployed).
 //   NUVORA_TEST_URL       default http://127.0.0.1:8789 (self-signed HTTPS is accepted)
 //   NUVORA_TEST_USER      default admin
 //   NUVORA_TEST_PASSWORD  default Nuvora-Test-Password-123
 //   NUVORA_SCREENSHOT_DIR default docs/screenshots
+//   NUVORA_EXPECT_SSO     set to 1 when the server has NUVORA_OIDC_* configured
 const {chromium}=require('playwright');
 const fs=require('fs');
 const path=require('path');
@@ -29,6 +31,11 @@ const pages=['overview','playground','models','knowledge','agents','actions','wo
 
   await page.goto(url);
   await page.getByRole('heading',{name:'Sign in.'}).waitFor();checks++;
+  if(process.env.NUVORA_EXPECT_SSO==='1'){
+    const sso=page.getByRole('link',{name:/^Sign in with /});
+    await sso.waitFor();
+    assert.equal(await sso.getAttribute('href'),'/api/auth/oidc/login');checks++;
+  }
   await shot('00-login');
   await page.getByRole('button',{name:'Sign in',exact:true}).click();
   assert.equal(await page.getByRole('alert').innerText(),'Wrong username or password.');checks++;
@@ -66,10 +73,21 @@ const pages=['overview','playground','models','knowledge','agents','actions','wo
   await page.waitForFunction(()=>location.hash==='#settings');checks++;
 
   await go('knowledge');
+  await page.getByLabel('Upload documents').setInputFiles({name:'smoke-upload.html',mimeType:'text/html',
+    buffer:Buffer.from('<html><head><style>.x{}</style></head><body><h1>Smoke upload</h1><p>The pangolin runbook covers uploaded HTML ingestion.</p><script>alert(1)</script></body></html>')});
+  await page.locator('.upload-list li.done').waitFor({timeout:20000});checks++;
+  await page.getByRole('button',{name:'Delete smoke-upload.html'}).waitFor();checks++;
+  await page.getByLabel('Search your knowledge').fill('pangolin');
+  await page.getByRole('button',{name:'Retrieve evidence'}).click();
+  await page.locator('.citation, .evidence, .result').filter({hasText:'pangolin'}).first().waitFor().catch(()=>page.getByText(/pangolin/).first().waitFor());checks++;
+  await page.getByRole('button',{name:'Delete smoke-upload.html'}).click();
+  await page.getByRole('button',{name:'Delete',exact:true}).click();
+  await page.getByRole('button',{name:'Delete smoke-upload.html'}).waitFor({state:'detached'});checks++;
+  await page.getByRole('button',{name:'Paste text'}).click();
   await page.getByLabel('Document title').fill('Browser test guide');
   await page.getByLabel('Document text').fill('Browser integration verifies quokka retrieval and document ingestion.');
   await page.getByRole('button',{name:'Index document',exact:true}).click();
-  await page.getByRole('status').waitFor();checks++;
+  await page.getByText('Document indexed').first().waitFor();checks++;
   await page.getByLabel('Search your knowledge').fill('quokka');
   await page.getByRole('button',{name:'Retrieve evidence'}).click();
   await page.getByText('Browser test guide',{exact:true}).first().waitFor();checks++;
@@ -99,11 +117,23 @@ const pages=['overview','playground','models','knowledge','agents','actions','wo
   await page.keyboard.press('Escape');
 
   await go('evaluations');
+  await page.getByRole('button',{name:'Grounding smoke suite',exact:true}).click();
+  await page.getByRole('dialog',{name:'Grounding smoke suite'}).getByRole('button',{name:'Edit',exact:true}).click();
+  await page.getByRole('tab',{name:'Case editor'}).waitFor();
+  await page.getByLabel('Grade with an LLM judge').first().check();
+  await page.getByLabel('Judge criteria').fill('Mentions microVMs and isolation');
+  await page.waitForTimeout(300);
+  await page.screenshot({path:path.join(shots,'18-eval-case-editor.png')});
+  await page.getByRole('button',{name:'Save new revision'}).click();
+  await page.getByRole('dialog',{name:'Grounding smoke suite'}).waitFor({state:'detached'}).catch(()=>{});
+  await page.keyboard.press('Escape');checks++;
+  await go('evaluations');
   await page.getByRole('button',{name:'Evaluate',exact:true}).first().click();
   await page.getByRole('heading',{name:'Every step, in view.'}).waitFor();checks++;
   await page.waitForTimeout(1500);
   await page.getByRole('button',{name:'Inspect'}).first().click();
   await page.getByRole('heading',{name:'Run evidence'}).waitFor();checks++;
+  await page.getByRole('table',{name:'Per-case results'}).waitFor();checks++;
   await shot('06-runs');
 
   await go('approvals');await shot('07-approvals');
@@ -123,6 +153,7 @@ const pages=['overview','playground','models','knowledge','agents','actions','wo
   await shot('16-api-keys');
   await go('settings');
   await page.getByText('Provider allow-list',{exact:true}).waitFor();checks++;
+  await page.getByText('Netra',{exact:true}).waitFor();checks++;
   await shot('17-settings');
 
   for(const name of pages){await go(name);checks++}

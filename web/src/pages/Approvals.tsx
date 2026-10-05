@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import { ShieldCheck } from 'lucide-react';
 import { api, time, type Row } from '../api';
 import { Badge, Card, ListEmpty } from '../components/kit';

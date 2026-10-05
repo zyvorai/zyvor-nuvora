@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import { createContext, useContext } from 'react';
 import type { Row } from '../api';
 

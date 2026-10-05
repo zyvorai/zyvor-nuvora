@@ -13,7 +13,7 @@ sidebar_position: 2
 
 The host needs k3s, Helm, podman (or a working docker), and passwordless `sudo` for the image import. When the deploy finishes:
 - Open `https://HOST:30789`. The certificate is self-signed and persists across redeploys.
-- Sign in as `admin` / `Admin@321` in workspace `default`.
+- Sign in as `admin` in workspace `default` with the password the script printed. It's generated on the first deploy and stored in the `nuvora-system/nuvora-admin` secret.
 
 ## What it does
 
@@ -39,23 +39,22 @@ The host needs k3s, Helm, podman (or a working docker), and passwordless `sudo` 
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `NUVORA_ADMIN_PASSWORD` | `Admin@321` | First administrator's password. Anything else needs 12+ characters. |
+| `NUVORA_ADMIN_PASSWORD` | generated | First administrator's password (12+ characters) |
+| `NUVORA_DEMO_PASSWORD` | `0` | Set `1` to use the demo login `Admin@321` (labs only) |
 | `NUVORA_DEMO` | `1` | Seed the offline demo workspace |
 | `NUVORA_NODE_PORT` | `30789` | HTTPS NodePort |
 | `NUVORA_PROVIDER_HOSTS` | `localhost,127.0.0.1` | Exact model endpoint allow-list |
 | `NUVORA_TLS_PERSIST` | `1` | Set `0` to serve plain HTTP behind your own TLS proxy |
 
 :::warning The demo password is for labs
-`Admin@321` is accepted only for the bootstrap administrator, and only because the chart sets `NUVORA_ALLOW_DEMO_PASSWORD=1`. Every other account still needs 12–256 characters.
-
-Before deploying anything beyond a demo, set `NUVORA_ADMIN_PASSWORD`.
+`Admin@321` is opt-in with `NUVORA_DEMO_PASSWORD=1`. It's accepted only for the bootstrap administrator, and only because the chart then sets `NUVORA_ALLOW_DEMO_PASSWORD=1`. Every other account still needs 12–256 characters.
 :::
 
 ## Test the deployment
 
 ```bash
 ./scripts/deploy-remote.sh 10.0.1.5 ubuntu --verify-only
-NUVORA_TEST_URL=https://10.0.1.5:30789 NUVORA_TEST_PASSWORD='Admin@321' \
+NUVORA_TEST_URL=https://10.0.1.5:30789 NUVORA_TEST_PASSWORD='YOUR_ADMIN_PASSWORD' \
   node scripts/browser-smoke.cjs
 ```
 

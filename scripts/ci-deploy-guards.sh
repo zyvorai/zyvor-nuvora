@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 # Nuvora — deploy guards gate (no cluster, no root)
 #
 # scripts/lib/deploy-guards.sh is sourced on the target host by deploy-remote.sh.
@@ -14,7 +15,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STUB="$(mktemp -d "${TMPDIR:-/tmp}/nuvora-guards.XXXXXX")"
 trap 'rm -rf "$STUB"' EXIT
 export STUB
-IMG="ghcr.io/zyvorai/zyvor-nuvora:0.1.0"
+IMG="ghcr.io/zyvorai/zyvor-nuvora:0.2.0"
 
 pass=0
 fail=0
@@ -169,7 +170,10 @@ check "the image is ensured before helm upgrade" \
   test "$(line 'deploy_ensure_image "$IMAGE"')" -lt "$(line 'helm upgrade --install')"
 check "the rollout is restarted and waited for until it completes" \
   grep -q 'deploy_wait_ready deployment/nuvora "app.kubernetes.io/name=nuvora" "$IMAGE"' "$rendered"
-check "the default demo login enables only the demo password" grep -q 'allowDemoPassword=true' "$rendered"
+check "the default deploy does not enable the demo password" bash -c '! grep -q "^ADMIN_PASSWORD=.Admin@321" "$0"' "$rendered"
+check "an unset password is generated on the host" grep -q 'openssl rand -base64 24' "$rendered"
+demo="$(NUVORA_DEMO_PASSWORD=1 "$ROOT/scripts/deploy-remote.sh" testuser@testhost --dry-run 2>/dev/null)"
+check "NUVORA_DEMO_PASSWORD=1 opts in to the demo login" bash -c 'grep -q "^ADMIN_PASSWORD=.Admin@321" <<<"$0"' "$demo"
 check "HTTPS is served on the NodePort" grep -q 'tls.existingSecret=nuvora-tls' "$rendered"
 short="$(NUVORA_ADMIN_PASSWORD=short "$ROOT/scripts/deploy-remote.sh" testuser@testhost --dry-run 2>&1 || true)"
 check "a short non-demo password is refused before anything runs" bash -c 'grep -q "12+ characters" <<<"$0"' "$short"

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import { useEffect, useState } from 'react';
 import { KeyRound, Trash2 } from 'lucide-react';
 import { api, type Row } from '../api';
@@ -38,6 +39,7 @@ export default function Users({ principal, act, refresh }: { principal: Row; act
                   {self && <span className="muted small"> · you</span>}
                 </b>
                 {lastAdmin && <small>Last administrator</small>}
+                {u.source === 'sso' && <small>SSO · role re-syncs from the identity provider at each sign-in</small>}
               </div>
               {self || lastAdmin ? (
                 <Badge value={u.role} />

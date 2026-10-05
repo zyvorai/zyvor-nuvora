@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 // Subsequence fuzzy scoring for the command palette. Higher is better; null means no match.
 // Rewards contiguous runs, word-start hits and an early first hit.
 export function fuzzyScore(query: string, text: string): number | null {

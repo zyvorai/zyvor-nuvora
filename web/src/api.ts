@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 export type Row = Record<string, any>;
 let csrf='';
 export function setCSRF(value: string) {csrf=value}

@@ -1,9 +1,12 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import { describe, expect, it } from 'vitest';
 import { fuzzyFilter, fuzzyScore } from './fuzzy';
 import { diffLines, pretty } from './diff';
 import { layout, topoOrder } from './dag';
 import { scale } from '../components/charts';
 import { notifications, passwordStrength } from './notifications';
+import { caseKinds, cleanCase } from '../components/CaseEditor';
+import { ssoError } from '../components/Login';
 
 describe('fuzzy', () => {
   it('matches subsequences and ranks contiguous hits first', () => {
@@ -82,5 +85,33 @@ describe('passwordStrength', () => {
   it('caps short passwords and rewards variety', () => {
     expect(passwordStrength('Ab1!').score).toBeLessThanOrEqual(1);
     expect(passwordStrength('correct-Horse-battery-9').score).toBe(5);
+  });
+});
+
+describe('knowledge file labels', () => {
+  it('names document types and sizes', async () => {
+    const { fileType, bytes } = await import('../pages/Knowledge');
+    expect(fileType('application/vnd.openxmlformats-officedocument.wordprocessingml.document')).toBe('DOCX');
+    expect(fileType('application/pdf')).toBe('PDF');
+    expect(fileType(undefined)).toBe('TEXT');
+    expect(bytes(undefined)).toBe('—');
+    expect(bytes(2048)).toBe('2.0 KB');
+    expect(bytes(3 * 1024 * 1024)).toBe('3.0 MB');
+  });
+});
+
+describe('evaluation cases', () => {
+  it('drops empty judges and keeps grading kinds', () => {
+    expect(cleanCase({ input: 'q', judge: { criteria: '  ' } })).toEqual({ input: 'q', contains: [], excludes: [] });
+    const c = cleanCase({ input: 'q', contains: ['a'], judge: { criteria: 'cite sources' }, grounded: true });
+    expect(c.judge).toEqual({ criteria: 'cite sources', min_score: 0.7 });
+    expect(caseKinds(c)).toEqual(['assertions', 'judge', 'grounded']);
+  });
+});
+
+describe('sso error', () => {
+  it('reads the callback error from the query string', () => {
+    expect(ssoError('?sso_error=Token%20has%20expired')).toBe('Token has expired');
+    expect(ssoError('')).toBe('');
   });
 });

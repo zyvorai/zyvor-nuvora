@@ -10,6 +10,11 @@
 | `NUVORA_SECRET_*` | Operator-provided credentials referenced by model configuration |
 | `NUVORA_BEHIND_TLS_PROXY` | Set to 1 only for a trusted HTTPS reverse proxy |
 | `NUVORA_URL`, `NUVORA_TOKEN` | CLI base URL and scoped bearer token |
+| `NUVORA_DATABASE_URL` | `postgresql://…` to use PostgreSQL instead of the `--db` SQLite file (needs the `postgres` extra) |
+| `NUVORA_OIDC_ISSUER`, `NUVORA_OIDC_CLIENT_ID`, `NUVORA_OIDC_CLIENT_SECRET`, `NUVORA_OIDC_*` | Single sign-on; see the [SSO guide](https://zyvorai.github.io/zyvor-nuvora/docs/operate/sso) for the role map, tenant and identity claims |
+| `NUVORA_NETRA_URL`, `NUVORA_ZYNTRA_URL`, `NUVORA_KEEP_URL` | Platform integrations; tokens in `NUVORA_SECRET_<SYSTEM>_TOKEN`; hosts must be on `NUVORA_PROVIDER_HOSTS`. `NUVORA_KEEP_IMAGE` picks the sandbox image |
+
+Optional Python extras: `pdf` (pypdf), `sso` (cryptography, for bearer JWTs), `postgres` (psycopg), `aws` (boto3), or `all`. The core runs on the standard library; a missing extra returns 503 with an install hint.
 
 Direct TLS:
 
@@ -22,14 +27,14 @@ python3 -m nuvora.server --host 0.0.0.0 --tls-cert /run/tls/cert.pem --tls-key /
 ## Container
 
 ```bash
-docker build -f deploy/Dockerfile -t zyvor-nuvora:0.1.0 .
+docker build -f deploy/Dockerfile -t zyvor-nuvora:0.2.0 .
 export NUVORA_ADMIN_PASSWORD='choose-your-own-strong-password'
 docker compose -f deploy/compose.yaml up -d
 ```
 
 The compose deployment binds loopback and expects a TLS reverse proxy before browser access. A direct browser request over HTTP cannot receive the Secure session cookie in this mode. For a simple local demo, use the Python quickstart; alternatively mount certificates and pass both TLS arguments to the container.
 
-The image runs uid/gid 10001, drops capabilities in Compose/Helm, and writes only to its data volume. This image does not include optional boto3; create an extended image with the AWS extra if needed.
+The image runs uid/gid 10001, drops capabilities in Compose/Helm, and writes only to its data volume. It installs every optional extra (`.[all]`), including boto3, pypdf, cryptography and psycopg. Tagged releases publish it as `ghcr.io/zyvorai/zyvor-nuvora:<version>`.
 
 ## Kubernetes
 
@@ -46,11 +51,20 @@ helm upgrade --install nuvora deploy/helm \
   --set ingress.tlsSecret=nuvora-tls
 ```
 
-Either use a TLS ingress and preserve the external Host header, or serve TLS directly with `--set tls.existingSecret=YOUR_TLS_SECRET` and optionally `--set service.type=NodePort --set service.nodePort=30789`. Provide a real TLS secret. Keep one replica. The chart deliberately uses Recreate because the worker/database are not coordinated across processes. External provider secrets must be injected by your own Kubernetes Secret configuration; no secret plaintext belongs in Helm values.
+Either use a TLS ingress and preserve the external Host header, or serve TLS directly with `--set tls.existingSecret=YOUR_TLS_SECRET` and optionally `--set service.type=NodePort --set service.nodePort=30789`. Provide a real TLS secret. External provider secrets must be injected by your own Kubernetes Secret configuration; no secret plaintext belongs in Helm values.
+
+With SQLite, keep one replica: the chart uses a PVC and `Recreate`. For several replicas, point `database.urlSecret` at a Secret whose `url` key holds a PostgreSQL URL. The chart then drops the PVC and rolls updates with `maxUnavailable: 0`. Rendering fails for `replicas > 1` without PostgreSQL. With SSO, it also fails unless `oidc.clientSecret` is set. SSO is configured under `oidc.*`.
+
+```bash
+kubectl create secret generic nuvora-db --from-literal=url='postgresql://nuvora:…@db:5432/nuvora?sslmode=require'
+helm upgrade --install nuvora deploy/helm --set database.urlSecret=nuvora-db --set replicas=3
+```
+
+Move an existing SQLite database with `scripts/migrate-sqlite-to-postgres.py /data/nuvora.db` (stop Nuvora first). It copies in one transaction, keeps audit sequence numbers, verifies every tenant's chain, and refuses a non-empty target.
 
 ## Backup and recovery
 
-Use SQLite's online backup:
+On PostgreSQL, use `pg_dump`, WAL archiving or managed snapshots. On SQLite, use the online backup:
 
 ```bash
 python3 - <<'PY'
@@ -60,7 +74,7 @@ with sqlite3.connect('nuvora.db') as source, sqlite3.connect('nuvora-backup.db')
 PY
 ```
 
-Protect and encrypt backups: documents, prompts, job inputs, and memory are sensitive. To restore, stop the service, replace the database, and restart. Queued runs execute; runs previously marked running become interrupted and require review. Do not replay an interrupted run without considering whether the external request already completed.
+Protect and encrypt backups: documents, prompts, job inputs, and memory are sensitive. To restore, stop the service, replace the database, and restart. Queued runs execute; runs previously marked running become interrupted and require review. With several replicas, a running job is interrupted only after its worker has missed heartbeats for 45 seconds. Do not replay an interrupted run without considering whether the external request already completed.
 
 ## Evidence checks
 
@@ -80,6 +94,6 @@ Anyone can change their password from the account menu; that signs out their oth
 
 ## Limits
 
-Chat timeout 45 seconds to providers (a streamed answer may run longer while data keeps arriving), 1 MiB API body, up to 100 chat messages, max 8192 output tokens, up to 100 batch items, max 20 agent steps, four concurrent calls per user. The local worker executes serially. Inference rates are configured estimates. Embedding requests are not yet included in the chat budget/ledger.
+Chat timeout 45 seconds to providers (a streamed answer may run longer while data keeps arriving), 1 MiB API body (28 MiB for uploads, 20 MB per file), up to 100 chat messages, max 8192 output tokens, up to 100 batch items, max 20 agent steps, four concurrent calls per user per replica. Each replica's worker executes serially. Inference rates are configured estimates. Embedding and rerank requests are not yet included in the chat budget/ledger.
 
-No destructive production tools are registered. Adding one must include an exact action schema, scoped authorization, separate-human approval, idempotency, preconditions, outcome validation and a rollback procedure. Keep microVM integration is required before allowing untrusted browser/code tools.
+No destructive production tools are registered. Adding one must include an exact action schema, scoped authorization, separate-human approval, idempotency, preconditions, outcome validation and a rollback procedure. Code runs only through Keep's `run_code`, after a different person approves the exact code, in a sandbox without network.

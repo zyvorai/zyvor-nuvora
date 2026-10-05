@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import { useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
 import type { Row } from '../api';
@@ -22,11 +23,12 @@ const TONE: Record<string, string> = {
   extract: 'cyan',
   action: 'purple',
   approval: 'red',
+  handoff: 'cyan',
 };
 
 const STATUS_LABEL: Record<StepStatus, string> = {
   completed: 'Completed',
-  waiting: 'Waiting for approval',
+  waiting: 'Waiting for a decision',
   failed: 'Failed',
   skipped: 'Skipped',
   pending: 'Not started',
@@ -41,7 +43,7 @@ export function stepStatuses(job: Row | undefined): Record<string, StepStatus> {
   const steps: Step[] = job.spec?.steps || [];
   const idx = job.checkpoint?.index;
   if (typeof idx === 'number' && steps[idx]) {
-    if (job.status === 'waiting_approval') out[steps[idx].id] = 'waiting';
+    if (job.status === 'waiting_approval' || job.status === 'waiting_external') out[steps[idx].id] = 'waiting';
     else if (job.status === 'failed') out[steps[idx].id] = 'failed';
   }
   return out;
@@ -150,11 +152,40 @@ function blank(type: string, collections: Collections, existing: Step[]): Step {
   if (type === 'template') step.template = '{{input}}';
   if (type === 'condition') step.contains = '';
   if (type === 'extract') step.fields = ['summary'];
+  if (type === 'handoff') {
+    step.action = '';
+    step.inputs = { summary: `{{${last || 'input'}}}` };
+    step.timeout_hours = 72;
+  }
   if (type === 'action') {
     step.action_id = collections.actions?.[0]?.id || '';
     step.arguments = {};
   }
   return step;
+}
+
+function HandoffInputs({ value, onChange }: { value: Row; onChange: (v: Row) => void }) {
+  const [text, setText] = useState(JSON.stringify(value, null, 2));
+  const [bad, setBad] = useState(false);
+  return (
+    <textarea
+      className="code-input"
+      rows={4}
+      value={text}
+      aria-invalid={bad}
+      onChange={(e) => {
+        setText(e.target.value);
+        try {
+          const v = JSON.parse(e.target.value);
+          const ok = v && typeof v === 'object' && !Array.isArray(v);
+          setBad(!ok);
+          if (ok) onChange(v);
+        } catch {
+          setBad(true);
+        }
+      }}
+    />
+  );
 }
 
 export function WorkflowBuilder({ steps, onChange, collections }: { steps: Step[]; onChange: (steps: Step[]) => void; collections: Collections }) {
@@ -309,6 +340,25 @@ export function WorkflowBuilder({ steps, onChange, collections }: { steps: Step[
                 ))}
               </select>
             </Field>
+          )}
+          {step.type === 'handoff' && (
+            <>
+              <div className="form-grid">
+                <Field label="Zyntra action">
+                  <input value={String(step.action || '')} onChange={(e) => update({ action: e.target.value })} placeholder="restart_service" required />
+                </Field>
+                <Field label="Scenario (optional)">
+                  <input value={String(step.scenario || '')} onChange={(e) => update({ scenario: e.target.value || undefined })} />
+                </Field>
+              </div>
+              <Field label="Inputs (JSON object · strings may use {{step_id}})">
+                <HandoffInputs value={(step.inputs as Row) || {}} onChange={(inputs) => update({ inputs })} />
+              </Field>
+              <Field label="Give up after (hours)">
+                <input type="number" min={1} max={720} value={Number(step.timeout_hours ?? 72)} onChange={(e) => update({ timeout_hours: Number(e.target.value) })} />
+              </Field>
+              <p className="note">Creates a Zyntra proposal and pauses as waiting_external. Zyntra’s own approvers decide; the run resumes with their result.</p>
+            </>
           )}
           {step.type === 'approval' && <p className="note">Pauses the run until a different person approves the exact context digest.</p>}
           <div className="builder__actions">

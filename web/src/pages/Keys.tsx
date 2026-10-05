@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import { useEffect, useState, type FormEvent } from 'react';
 import { Copy, KeyRound, Plus, Trash2 } from 'lucide-react';
 import { ago, api, time, type Row } from '../api';

@@ -7,7 +7,7 @@
 ./scripts/deploy-remote.sh ubuntu@10.0.1.5     # same thing
 ```
 
-On success it prints `NUVORA ready` and `done — open https://10.0.1.5:30789 (sign in as admin)`. Sign in with `admin` / `Admin@321` in workspace `default`.
+On success it prints `NUVORA ready` and `done — open https://10.0.1.5:30789 (sign in as admin)`. Sign in as `admin` in workspace `default`. On the first deploy the script generates a random administrator password and prints it once. It's stored in the `nuvora-system/nuvora-admin` secret, and later deploys reuse it.
 
 The host needs k3s, Helm, podman (or a working docker), and passwordless `sudo` for the image import.
 
@@ -40,7 +40,8 @@ The host needs k3s, Helm, podman (or a working docker), and passwordless `sudo` 
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `NUVORA_ADMIN_PASSWORD` | `Admin@321` | First administrator's password. Anything other than the demo password needs 12+ characters. It's only used when the database is first created. |
+| `NUVORA_ADMIN_PASSWORD` | generated | First administrator's password (12+ characters). It's only used when the database is first created. |
+| `NUVORA_DEMO_PASSWORD` | `0` | Set `1` to use the demo login `Admin@321` instead (labs only) |
 | `NUVORA_DEMO` | `1` | Seed the offline demo workspace |
 | `NUVORA_NODE_PORT` | `30789` | HTTPS NodePort |
 | `NUVORA_PROVIDER_HOSTS` | `localhost,127.0.0.1` | Exact model endpoint allow-list |
@@ -51,17 +52,17 @@ The host needs k3s, Helm, podman (or a working docker), and passwordless `sudo` 
 
 ## The demo password
 
-`Admin@321` matches Netra's demo login, so a fresh deploy is easy to try. Two settings work together:
-- The chart's `allowDemoPassword` sets `NUVORA_ALLOW_DEMO_PASSWORD=1` in the pod.
+`Admin@321` matches Netra's demo login. It's opt-in: run the deploy with `NUVORA_DEMO_PASSWORD=1`. Two settings then work together:
+- The script sets the chart's `allowDemoPassword`, which sets `NUVORA_ALLOW_DEMO_PASSWORD=1` in the pod.
 - With that variable set, the server accepts exactly this one shorter password for the bootstrap administrator.
 
-Every other password, including users created later, still needs 12–256 characters. For anything beyond a demo, set `NUVORA_ADMIN_PASSWORD` before the first deploy. Otherwise, sign in and add a new administrator in **Access**.
+Every other password, including users created later, still needs 12–256 characters. To rotate the generated password, sign in and add a new administrator in **Access**, or set `NUVORA_ADMIN_PASSWORD` before a fresh first deploy.
 
 ## Checks
 
 ```bash
 ./scripts/deploy-remote.sh 10.0.1.5 ubuntu --verify-only
-NUVORA_TEST_URL=https://10.0.1.5:30789 NUVORA_TEST_PASSWORD='Admin@321' node scripts/browser-smoke.cjs
+NUVORA_TEST_URL=https://10.0.1.5:30789 NUVORA_TEST_PASSWORD='YOUR_ADMIN_PASSWORD' node scripts/browser-smoke.cjs
 ```
 
 CI runs `helm lint`, `helm template`, `shellcheck`, and `scripts/ci-deploy-guards.sh` on every push.
@@ -78,8 +79,8 @@ service:
 tls:
   existingSecret: nuvora-tls   # any kubernetes.io/tls Secret; empty = plain HTTP behind a proxy
 demo: true
-allowDemoPassword: true
+allowDemoPassword: false
 providerHosts: "localhost,127.0.0.1"
 ```
 
-Keep one replica: the chart uses `Recreate` because the worker and the SQLite database aren't coordinated across processes.
+With SQLite, keep one replica; the chart uses `Recreate`. For several replicas, set `database.urlSecret` to a Secret holding a PostgreSQL URL (see [OPERATIONS.md](OPERATIONS.md)).

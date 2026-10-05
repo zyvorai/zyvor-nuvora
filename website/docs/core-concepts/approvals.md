@@ -15,7 +15,8 @@ An agent runs a bounded model-and-tool loop, capped at 20 steps, over a closed r
 
 ## Workflows
 
-A workflow is a validated DAG of steps: `retrieve`, `generate`, `template`, `condition`, `extract`, `action`, and `approval`.
+A workflow is a validated DAG of steps: `retrieve`, `generate`, `template`, `condition`, `extract`, `action`, `approval`, and `handoff`.
+- A `handoff` sends a proposal to Zyntra and waits as `waiting_external` until Zyntra's approvers decide. See [integrations](../operate/integrations.md).
 - Each completed step writes a durable checkpoint.
 - A run is pinned to the workflow revision it started with.
 

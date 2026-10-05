@@ -1,5 +1,6 @@
-import { useState, type FormEvent, type KeyboardEvent } from 'react';
-import { BookOpenCheck, Cpu, Eye, EyeOff, Fingerprint, ShieldCheck, UserCheck, Workflow } from 'lucide-react';
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
+import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { BookOpenCheck, Cpu, Eye, EyeOff, Fingerprint, KeyRound, ShieldCheck, UserCheck, Workflow } from 'lucide-react';
 import { api, setCSRF, type Row } from '../api';
 
 const WRONG = 'Wrong username or password.';
@@ -12,6 +13,11 @@ function message(e: unknown): string {
   if (/wrong tenant|sign in required/i.test(text)) return WRONG;
   if (/failed to fetch|networkerror|unexpected token|load failed/i.test(text)) return 'Could not reach the workspace. Check the URL and try again.';
   return text;
+}
+
+// The SSO callback redirects to /?sso_error=… on failure; read it once and clean the URL.
+export function ssoError(search: string): string {
+  return new URLSearchParams(search).get('sso_error') || '';
 }
 
 function remembered(): { tenant: string; username: string } {
@@ -55,8 +61,16 @@ export default function Login({ onLogin }: { onLogin: (principal: Row) => void }
   const [showTenant, setShowTenant] = useState(false);
   const [reveal, setReveal] = useState(false);
   const [caps, setCaps] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(() => ssoError(window.location.search));
   const [busy, setBusy] = useState(false);
+  const [sso, setSSO] = useState<{ label: string; login: string } | null>(null);
+
+  useEffect(() => {
+    if (window.location.search.includes('sso_error')) window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+    api('/api/auth/providers')
+      .then((r) => setSSO(r.oidc || null))
+      .catch(() => setSSO(null));
+  }, []);
   const host = window.location.host || window.location.hostname;
 
   async function submit(e: FormEvent) {
@@ -188,6 +202,17 @@ export default function Login({ onLogin }: { onLogin: (principal: Row) => void }
           <button type="submit" className="primary" disabled={busy}>
             {busy ? 'Signing in…' : 'Sign in'}
           </button>
+          {sso && (
+            <>
+              <p className="login-divider">
+                <span>or</span>
+              </p>
+              <a className="buttonlike btn-secondary login-sso" href={sso.login}>
+                <KeyRound size={16} aria-hidden="true" />
+                Sign in with {sso.label === 'Single sign-on' ? 'SSO' : sso.label}
+              </a>
+            </>
+          )}
           {!showTenant && (
             <button type="button" className="login-workspace" onClick={() => setShowTenant(true)}>
               Workspace: <b>{tenant}</b> · Change

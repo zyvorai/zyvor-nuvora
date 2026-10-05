@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import json
 import tempfile
 import threading
@@ -5,6 +6,7 @@ import time
 import unittest
 from pathlib import Path
 from nuvora.store import Store
+from dbutil import make_store
 from nuvora.security import Auth, Fault, guard, validate_url
 from nuvora.platform import Platform
 from nuvora.providers import Providers
@@ -13,7 +15,7 @@ from nuvora.retrieval import chunks, search, cosine
 class PlatformTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory()
-        self.store=Store(str(Path(self.temp.name)/'test.db'))
+        self.store=make_store(str(Path(self.temp.name)/'test.db'))
         self.auth=Auth(self.store)
         self.app=Platform(self.store,self.auth)
         self.admin={'tenant':'a','username':'owner','role':'admin'}

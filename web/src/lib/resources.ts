@@ -1,14 +1,15 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import type { Row } from '../api';
 
 // Writable fields per collection; mirrors Platform.validate so duplicates pass validation.
 export const FIELDS: Record<string, string[]> = {
   models: ['provider', 'upstream_model', 'base_url', 'key_env', 'region', 'capability', 'input_price', 'output_price', 'enabled'],
-  knowledge: ['embedding_model'],
+  knowledge: ['embedding_model', 'rerank_model'],
   agents: ['model', 'knowledge_ids', 'tools', 'max_steps', 'system_prompt'],
   prompts: ['template'],
   policies: ['max_chars', 'daily_tokens', 'blocked_topics', 'redact_pii', 'detect_injection'],
   workflows: ['steps'],
-  evaluations: ['model', 'cases', 'pass_threshold'],
+  evaluations: ['model', 'cases', 'pass_threshold', 'judge_model', 'knowledge_ids'],
   recipes: ['model', 'method', 'dataset', 'rank', 'epochs'],
   actions: ['url', 'method', 'key_env', 'description', 'input_schema'],
 };

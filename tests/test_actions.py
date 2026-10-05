@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import test_platform
 import unittest
 from unittest.mock import patch

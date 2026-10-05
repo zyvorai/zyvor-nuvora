@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Theme } from '../theme';
 import { navGroups, type Page } from '../lib/navGroups';

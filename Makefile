@@ -1,4 +1,5 @@
-.PHONY: test web check run package
+# SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
+.PHONY: test web check run package spdx
 
 test:
 	python3 -m unittest discover -s tests -v
@@ -6,7 +7,10 @@ test:
 web:
 	cd web && npm ci && npm run build
 
-check: test
+spdx:
+	python3 scripts/check-spdx.py
+
+check: spdx test
 	cd web && npm run build && npm test
 
 run:

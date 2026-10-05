@@ -1169,3 +1169,49 @@ form.filters input { min-height: 36px; margin: 0; padding: 6px 10px; font-size: 
 }
 .grid.settings { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 @media (max-width: 800px) { .grid.settings { grid-template-columns: minmax(0, 1fr); } }
+
+/* Knowledge uploads */
+.dropzone { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 28px 20px; text-align: center;
+  border: 1.5px dashed var(--hairline-1); border-radius: var(--radius-lg); background: var(--bg-elevated-2); transition: border-color .15s, background .15s; }
+.dropzone svg { color: var(--apple-blue); }
+.dropzone small { color: var(--text-tertiary); }
+.dropzone .actions { margin-top: 10px; }
+.dropzone.over { border-color: var(--apple-blue); background: color-mix(in srgb, var(--apple-blue) 8%, transparent); }
+.dropzone.disabled { opacity: .6; }
+.upload-list { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 6px; }
+.upload-list li { display: grid; grid-template-columns: 18px minmax(0, auto) minmax(0, 1fr); align-items: center; gap: 8px; font-size: 13px; }
+.upload-list li b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upload-list li small { color: var(--text-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upload-list li.done svg { color: var(--accent-green); }
+.upload-list li.error svg, .upload-list li.error small { color: var(--danger); }
+.paste-form { margin-top: 16px; }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.doc-list { list-style: none; margin: 0; padding: 0; }
+.doc-list li { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--hairline-1); }
+.doc-list li:first-child { border-top: 0; }
+.doc-list li > svg { color: var(--text-tertiary); }
+.doc-list b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc-list small { color: var(--text-tertiary); font-size: 12px; }
+.type-badge { display: inline-block; padding: 0 6px; border-radius: 6px; font-size: 10.5px; font-weight: 700; letter-spacing: .04em;
+  color: var(--apple-blue); background: color-mix(in srgb, var(--apple-blue) 12%, transparent); }
+
+/* Evaluation case editor and per-case results */
+.case-editor { display: grid; gap: 12px; margin-bottom: 14px; }
+.case-card { border: 1px solid var(--line, #e3e6ea); border-radius: 10px; padding: 10px 14px 12px; display: grid; gap: 8px; }
+.case-card legend { display: flex; gap: 6px; align-items: center; font-weight: 600; padding: 0 6px; }
+.case-card .link { display: inline-flex; gap: 4px; align-items: center; justify-self: start; }
+.case-results { width: 100%; border-collapse: collapse; font-size: 13px; margin: 10px 0; }
+.case-results th, .case-results td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line, #e3e6ea); vertical-align: top; }
+.case-results td small { display: block; max-width: 260px; }
+
+/* SSO sign-in */
+.login-divider { display: flex; align-items: center; gap: 10px; color: var(--muted, #6b7280); font-size: 12px; margin: 4px 0; }
+.login-divider::before, .login-divider::after { content: ''; flex: 1; border-top: 1px solid var(--line, #e3e6ea); }
+.login-sso { display: inline-flex; justify-content: center; align-items: center; gap: 8px; text-decoration: none; }
+
+/* Settings · integrations */
+.integration-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.integration-list li { display: grid; grid-template-columns: auto 1fr auto auto; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--line, #e3e6ea); border-radius: 10px; }
+.integration-list li > div { display: grid; gap: 2px; min-width: 0; }
+.integration-list small { overflow-wrap: anywhere; }

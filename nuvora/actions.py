@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 """Typed enterprise API tools. External writes always require separate approval."""
 import json
 import os

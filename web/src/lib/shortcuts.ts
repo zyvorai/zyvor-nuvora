@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import { pageLabel, type Page } from './navGroups';
 
 // "g" then a letter navigates; single keys open palette, create and help.

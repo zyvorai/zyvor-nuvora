@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import json
 import tempfile
 import threading
@@ -6,6 +7,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from nuvora.store import Store
+from dbutil import make_store
 from nuvora.security import Auth, Fault
 from nuvora.platform import Platform
 from nuvora.server import Server
@@ -22,7 +24,7 @@ def sse(raw):
 class ConsoleAPITests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory()
-        self.store=Store(str(Path(self.tmp.name)/'test.db'))
+        self.store=make_store(str(Path(self.tmp.name)/'test.db'))
         self.auth=Auth(self.store)
         self.auth.add_user('a','owner','Long-password-123','admin')
         self.auth.add_user('a','dev','Long-password-123','developer')

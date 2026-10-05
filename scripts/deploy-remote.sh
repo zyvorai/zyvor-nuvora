@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 # Nuvora — remote deploy (SSH + rsync + podman build + k3s import + Helm)
 #
 # Profiles:
@@ -12,9 +13,11 @@
 #   ./scripts/deploy-remote.sh user@10.0.1.5 --dry-run
 #
 # Environment:
-#   NUVORA_ADMIN_PASSWORD   first administrator's password (default Admin@321, the
-#                           Netra-style demo login; anything else needs 12+ chars).
+#   NUVORA_ADMIN_PASSWORD   first administrator's password (12+ chars). When unset, a
+#                           random password is generated on the first deploy and
+#                           printed once; later deploys keep the stored secret.
 #                           Only used when the workspace database is first created.
+#   NUVORA_DEMO_PASSWORD=1  use the Netra-style demo login Admin@321 instead (labs only)
 #   NUVORA_DEMO             seed the offline demo workspace (default 1)
 #   NUVORA_NODE_PORT        HTTPS NodePort (default 30789)
 #   NUVORA_PROVIDER_HOSTS   model endpoint allowlist (default localhost,127.0.0.1)
@@ -32,7 +35,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-VERSION="0.1.0"
+VERSION="0.2.0"
 IMAGE="ghcr.io/zyvorai/zyvor-nuvora:${VERSION}"
 NAMESPACE="nuvora-system"
 PROFILE="k3s"
@@ -43,7 +46,7 @@ POSITIONAL=()
 SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30)
 
 usage() {
-  sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '3,32p' "$0" | sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -85,7 +88,8 @@ if [[ -z "${TARGET}" ]]; then
 fi
 
 HOST="${TARGET#*@}"
-ADMIN_PASSWORD_LOCAL="${NUVORA_ADMIN_PASSWORD:-Admin@321}"
+ADMIN_PASSWORD_LOCAL="${NUVORA_ADMIN_PASSWORD:-}"
+[[ "${NUVORA_DEMO_PASSWORD:-0}" == "1" ]] && ADMIN_PASSWORD_LOCAL="Admin@321"
 DEMO_LOCAL="${NUVORA_DEMO:-1}"
 NODE_PORT_LOCAL="${NUVORA_NODE_PORT:-30789}"
 PROVIDER_HOSTS_LOCAL="${NUVORA_PROVIDER_HOSTS:-localhost,127.0.0.1}"
@@ -96,8 +100,8 @@ SCHEME="https"
 log() { printf '[nuvora-deploy] %s\n' "$*"; }
 ssh_host() { ssh "${SSH_OPTS[@]}" "$TARGET" "$@"; }
 
-if (( ${#ADMIN_PASSWORD_LOCAL} < 12 )) && [[ "$ADMIN_PASSWORD_LOCAL" != "Admin@321" ]]; then
-  echo "NUVORA_ADMIN_PASSWORD must contain 12+ characters (or be the demo password Admin@321)" >&2
+if [[ -n "$ADMIN_PASSWORD_LOCAL" ]] && (( ${#ADMIN_PASSWORD_LOCAL} < 12 )) && [[ "$ADMIN_PASSWORD_LOCAL" != "Admin@321" ]]; then
+  echo "NUVORA_ADMIN_PASSWORD must contain 12+ characters (or set NUVORA_DEMO_PASSWORD=1)" >&2
   exit 2
 fi
 
@@ -181,6 +185,14 @@ HOST_IP="\$(hostname -I | awk '{print \$1}')"
 kubectl create namespace "\$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
 # First administrator. The server reads this only when the database is created.
+GENERATED_PASSWORD=""
+if [[ -z "\$ADMIN_PASSWORD" ]]; then
+  ADMIN_PASSWORD="\$(kubectl -n "\$NAMESPACE" get secret nuvora-admin -o jsonpath='{.data.password}' 2>/dev/null | base64 -d || true)"
+  if [[ -z "\$ADMIN_PASSWORD" ]]; then
+    ADMIN_PASSWORD="\$(openssl rand -base64 24 | tr -d '/+=' | cut -c1-20)"
+    GENERATED_PASSWORD="\$ADMIN_PASSWORD"
+  fi
+fi
 kubectl -n "\$NAMESPACE" create secret generic nuvora-admin --from-literal=password="\$ADMIN_PASSWORD" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
@@ -242,6 +254,9 @@ for _ in \$(seq 1 30); do
     echo
     echo "NUVORA_URL=\${SCHEME}://\${HOST_IP}:\${NODE_PORT}"
     echo "NUVORA ready (k3s, \${SCHEME^^} NodePort \${NODE_PORT})"
+    if [[ -n "\$GENERATED_PASSWORD" ]]; then
+      echo "Generated admin password (shown once; stored in secret nuvora-system/nuvora-admin): \$GENERATED_PASSWORD"
+    fi
     exit 0
   fi
   sleep 2

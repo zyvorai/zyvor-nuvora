@@ -1,22 +1,22 @@
 # Implementation roadmap
 
-## Next: real platform integration
+0.2.0 shipped OIDC SSO, PostgreSQL with replicas, document upload, LLM-judge and grounded evaluations, rerank, live `/v1` streaming, and the Fabric, Gryvia, Netra, Zyntra and Keep integrations. What remains:
 
-- Fabric and Gryvia provider discovery and credentials with workload identity.
-- Keep execution backend: ephemeral cells, browser/code/tool execution, host-brokered secrets.
-- Netra read-only investigation and Zyntra proposal tools with independent approval authority.
+## Platform integration
+
+- Workload identity for Fabric and Gryvia instead of static keys; credential rotation.
+- Zyntra webhooks instead of polling; Keep browser sessions and file artifacts.
 - Verixa adapter for action/outcome release tests.
 
 ## Retrieval and data automation
 
 - Document-level authorization before retrieval, connector incremental sync and tombstones.
-- PDF/OCR parsers in isolated workers, audio/video extraction, human-reviewed structured schemas.
-- Reranking, semantic retrieval quality tests, citation entailment and source freshness.
-- Retrieval scale benchmarks and vector-store backend adapters.
+- OCR in isolated workers, audio/video extraction, human-reviewed structured schemas.
+- Citation entailment and source freshness; live embedding-quality benchmarks.
+- Retrieval scale benchmarks and vector-store backend adapters (pgvector first).
 
 ## Models and optimization
 
-- Live upstream streaming on `/v1/chat/completions` (the console stream is live already), and Bedrock ConverseStream.
 - Explicit provider retry/failover policies with response-start safety.
 - Tokenizer-aware estimates and embedding usage/budget accounting.
 - Real fine-tuning/distillation submissions through Gryvia with dataset lineage and evaluation-based promotion.
@@ -24,9 +24,9 @@
 
 ## Enterprise readiness
 
-- OIDC/SAML through Haven; service identity and credential rotation.
-- Postgres-backed state, leased distributed workers, idempotent external actions and HA.
-- Tenant retention/delete/export policies, quotas for every API path, scalable login throttling.
+- SAML, SCIM deprovisioning and back-channel logout; several identity providers per deployment.
+- Cluster-wide concurrency limits and budget reservations (today they are per replica).
+- Tenant retention/delete/export policies and quotas for every API path.
 - Signed audit checkpoints and external immutable storage anchors.
 - Complete MCP protocol transport, A2A adapters and OpenTelemetry trace export.
 - Formal accessibility audit with assistive technology.

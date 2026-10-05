@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import { describe, expect, it } from 'vitest';
 import { navGroups, pages, readFocus, readPage } from './navGroups';
 

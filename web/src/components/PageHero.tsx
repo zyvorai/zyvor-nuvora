@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import type { ReactNode } from 'react';
 
 export type HeroTint = 'green' | 'amber' | 'purple' | 'red';

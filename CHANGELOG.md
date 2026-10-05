@@ -1,6 +1,23 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 — 2026-10-05
+
+- **Single sign-on:** OIDC authorization code flow with PKCE (`nuvora/oidc.py`). Adds bearer JWT verification against the issuer JWKS (`sso` extra), just-in-time users, group-to-role mapping on every login, and an optional tenant claim. The sign-in page gains a **Sign in with SSO** button. Configure with `NUVORA_OIDC_*` or the Helm `oidc.*` values.
+- **PostgreSQL:** `nuvora/db.py` puts SQLite and PostgreSQL behind one adapter, selected with `NUVORA_DATABASE_URL` (`postgres` extra). Also adds:
+  - versioned migrations under an advisory lock
+  - atomic job claims (`FOR UPDATE SKIP LOCKED`) and worker heartbeats, so only jobs whose worker died become interrupted
+  - per-tenant advisory locks on audit appends
+  - a database-backed login throttle shared by replicas
+  - `scripts/migrate-sqlite-to-postgres.py`
+- **Helm:** `replicas` and `database.urlSecret` (no PVC, rolling updates). Rendering refuses several replicas on SQLite, or with SSO but no client secret.
+- **Integrations:** Fabric/Gryvia model presets and model discovery. Netra read tools (`netra_status`, `netra_incidents`, `netra_flow_summary`, `netra_drop_explain`). A workflow `handoff` step that parks a run as `waiting_external` until Zyntra decides. Keep `run_code`, executed only after a different person approves the exact code. The Settings page adds an Integrations card with connection tests.
+- **Documents:** file upload for txt, md, json, csv, html and docx (PDF with the `pdf` extra), with a per-route body limit. Deleting a document removes it from every knowledge base.
+- **Evaluations and retrieval:** LLM-judge and grounded cases, a case editor, and per-case reasons in Runs. Adds Ollama embeddings, optional LLM rerank, and stemming with stopwords. A recall@k fixture test guards retrieval quality.
+- **Streaming:** `/v1/chat/completions` streams live from the provider, and Bedrock uses `converse_stream`.
+- **Release:** optional extras (`pdf`, `sso`, `postgres`, `aws`, `all`) with the core still standard-library only. The image bundles every extra. A tag workflow publishes the ghcr.io image, wheel, Helm chart and SBOM. SPDX headers are checked in CI.
+- **Deploy:** `deploy-remote.sh` generates a random administrator password on the first deploy. The demo login `Admin@321` is opt-in with `NUVORA_DEMO_PASSWORD=1`.
+- **CI:** a PostgreSQL job runs the backend suite and a migration round trip against postgres:16.
+- **Docs:** new Operate guides for SSO, PostgreSQL, integrations, and documents and evaluations.
 
 - **License:** Nuvora moves from Apache-2.0 to the Zyvor Production License v1.0 (`LicenseRef-Zyvor-Production-1.0`), matching Netra. Non-production use stays free; production use needs a commercial license. Adds `NOTICE` and `LICENSES/`.
 

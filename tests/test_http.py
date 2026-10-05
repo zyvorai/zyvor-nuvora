@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import hashlib
 import json
 import tempfile
@@ -7,6 +8,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from nuvora.store import Store
+from dbutil import make_store
 from nuvora.security import Auth
 from nuvora.platform import Platform
 from nuvora.server import Server
@@ -15,7 +17,7 @@ class HTTPTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmp=tempfile.TemporaryDirectory()
-        cls.store=Store(str(Path(cls.tmp.name)/'test.db'))
+        cls.store=make_store(str(Path(cls.tmp.name)/'test.db'))
         cls.auth=Auth(cls.store)
         cls.auth.add_user('a','owner','Long-password-123','admin')
         cls.auth.add_user('b','other','Long-password-123','admin')
@@ -70,7 +72,7 @@ class HTTPTests(unittest.TestCase):
         self.assertEqual(value['object'],'chat.completion')
         self.assertIn('OFFLINE DEMO',value['choices'][0]['message']['content'])
 
-    def test_buffered_sse(self):
+    def test_streaming_sse(self):
         code,raw,headers=self.request('/v1/chat/completions',{'model':'auto','messages':[{'role':'user','content':'hello'}],'stream':True})
         self.assertEqual(code,200)
         self.assertIn('text/event-stream',headers['Content-Type'])

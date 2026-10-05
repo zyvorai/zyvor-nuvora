@@ -1,0 +1,30 @@
+{
+  "documents": {
+    "keep-isolation": "Keep runs every agent tool call inside a Firecracker-style microVM. Each cell boots from a snapshot, has no host filesystem access and is destroyed after the session ends.",
+    "approvals": "Consequential actions pause for a human approval. The approver must be a different person from the proposer, and the approval is bound to a SHA-256 fingerprint of the exact action arguments.",
+    "budget": "Each workspace has a daily token budget. When inference would exceed the budget the API returns HTTP 429 and the request is not sent to the provider.",
+    "audit-chain": "Every audit event stores the digest of the previous event, forming a hash chain. Exporting the chain lets an auditor verify offline that no event was altered or removed.",
+    "pii": "Guardrails redact email addresses and long account-number-like sequences from prompts, documents and model output before anything is stored or shown.",
+    "frankfurt-outage": "Incident 2291: a power fault in the Frankfurt eu-central zone took three Pro-plan customer accounts offline for 47 minutes on 12 March.",
+    "gpu-scheduling": "Gryvia schedules GPU training and inference workloads on Kubernetes, packing jobs onto nodes by memory and interconnect topology.",
+    "sso": "Single sign-on uses OpenID Connect with the authorization code flow and PKCE. Identity provider groups map to Nuvora roles through a role map.",
+    "postgres-ha": "With a Postgres backend several Nuvora replicas share one database. Workers lease jobs with SELECT FOR UPDATE SKIP LOCKED so a job runs once.",
+    "pricing": "Production use requires a commercial license from Zyvor AI Labs. Evaluation, development and research use is free of charge.",
+    "retention": "Documents can be deleted individually; deleting a knowledge base removes all of its documents and their chunks from retrieval.",
+    "streaming": "Answers stream token by token. Text is held until a sentence boundary so the output guardrail can check it before release."
+  },
+  "queries": [
+    {"q": "Which customers lost service in the Frankfurt power incident?", "relevant": "frankfurt-outage"},
+    {"q": "Can the person who proposed an action also approve it?", "relevant": "approvals"},
+    {"q": "What happens when the daily token budget is exhausted?", "relevant": "budget"},
+    {"q": "How do agents execute tools in isolation?", "relevant": "keep-isolation"},
+    {"q": "How can an auditor detect tampered audit events?", "relevant": "audit-chain"},
+    {"q": "Are email addresses removed from documents?", "relevant": "pii"},
+    {"q": "How are identity provider groups mapped to roles?", "relevant": "sso"},
+    {"q": "How do multiple replicas avoid running the same job twice?", "relevant": "postgres-ha"},
+    {"q": "Is production use free?", "relevant": "pricing"},
+    {"q": "Does deleting a knowledge base remove its documents?", "relevant": "retention"},
+    {"q": "Why does streamed text arrive sentence by sentence?", "relevant": "streaming"},
+    {"q": "Where are GPU training jobs scheduled?", "relevant": "gpu-scheduling"}
+  ]
+}

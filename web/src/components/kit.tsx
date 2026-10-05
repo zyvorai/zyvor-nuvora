@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import { useEffect, type ReactNode } from 'react';
 import { X, type LucideIcon } from 'lucide-react';
 

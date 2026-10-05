@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 """Dependency-free SDK. Cookie login or operator-issued scoped service token."""
 import hashlib
 import http.cookiejar
@@ -35,6 +36,33 @@ class NuvoraClient:
 
     def chat(self,question,model='auto'):
         return self.request('/api/chat',{'model':model,'messages':[{'role':'user','content':question}]})
+
+    def chat_stream(self,question,model='auto'):
+        """Yield answer text as it is released (OpenAI-compatible SSE on /v1/chat/completions)."""
+        headers={'Content-Type':'application/json'}
+        if self.token:headers['Authorization']='Bearer '+self.token
+        if self.csrf:headers['X-CSRF-Token']=self.csrf
+        body={'model':model,'stream':True,'messages':[{'role':'user','content':question}]}
+        req=urllib.request.Request(self.base+'/v1/chat/completions',json.dumps(body).encode(),headers,method='POST')
+        try:
+            response=self.opener.open(req,timeout=120)
+        except urllib.error.HTTPError as exc:
+            raise RuntimeError(json.loads(exc.read()).get('error','API request failed')) from exc
+        with response:
+            for raw in response:
+                line=raw.decode('utf-8','replace').strip()
+                if not line.startswith('data:'):
+                    continue
+                data=line[5:].strip()
+                if data=='[DONE]':
+                    return
+                chunk=json.loads(data)
+                if 'error' in chunk:
+                    raise RuntimeError(chunk['error'].get('message','Stream failed'))
+                for choice in chunk.get('choices',[]):
+                    text=choice.get('delta',{}).get('content')
+                    if text:
+                        yield text
 
     def answer(self,question,knowledge_ids,model='auto'):
         return self.request('/api/answer',{'model':model,'question':question,'knowledge_ids':knowledge_ids})

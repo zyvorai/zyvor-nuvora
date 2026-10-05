@@ -1,10 +1,11 @@
+# SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 """Build a repository source ZIP with deterministic file inclusion and checksums."""
 import hashlib
 import json
 from pathlib import Path
 import zipfile
 root=Path(__file__).resolve().parents[1]
-output=root.parent/'zyvor-nuvora-0.1.0.zip'
+output=root.parent/'zyvor-nuvora-0.2.0.zip'
 excluded={'.git','node_modules','__pycache__','build','dist','.venv','.docusaurus','.cursor','screenshots'}
 files=[]
 for path in sorted(root.rglob('*')):

@@ -1,9 +1,11 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import { useState } from 'react';
 import { Activity, ArrowRight, Bot, CheckCircle2, CircleDashed, Clock3, Download, ShieldCheck, Wrench, XCircle } from 'lucide-react';
 import { ago, api, download, money, time, type Row } from '../api';
 import { Badge, Card } from '../components/kit';
 import ResourceTable from '../components/ResourceTable';
 import WorkflowCanvas, { stepStatuses } from '../components/WorkflowCanvas';
+import { CaseResults } from '../components/CaseEditor';
 import type { Act } from '../lib/types';
 
 type Entry = { key: string; icon: typeof Activity; tone: string; title: string; detail?: string; status: string };
@@ -103,7 +105,9 @@ function Inspector({ run, approvals, principal, canApprove, act }: { run: Row; a
         </div>
       )}
 
-      {entries.length > 0 && (
+      {run.type === 'evaluation' && run.result?.cases?.length > 0 && <CaseResults cases={run.result.cases} />}
+
+      {entries.length > 0 && run.type !== 'evaluation' && (
         <ol className="timeline" aria-label="Run steps">
           {entries.map((e) => (
             <li key={e.key}>

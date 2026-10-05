@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Braces, Copy, Download, Pencil, Play, Trash2 } from 'lucide-react';
 import { ago, api, download, time, type Row } from '../api';

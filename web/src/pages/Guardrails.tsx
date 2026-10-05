@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import { useState } from 'react';
 import { ShieldAlert } from 'lucide-react';
 import { api, type Row } from '../api';

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 """BM25 + hashed lexical vectors. Optional real embeddings via provider adapters."""
 import collections
 import hashlib
@@ -5,8 +6,28 @@ import math
 import re
 
 
+STOP=frozenset('a an and are as at be by can do does for from has have how i if in into is it its of on or that the their this to was what when where which who why will with you your'.split())
+
+
+def stem(word):
+    """A light suffix stripper so plurals and simple tenses match (agents/agent, scheduled/schedule)."""
+    if len(word)<=3 or word.isdigit():
+        return word
+    if word.endswith('ies') and len(word)>4:
+        return word[:-3]+'y'
+    if word.endswith(('sses','ss','us','is')):
+        return word[:-2] if word.endswith('sses') else word
+    if word.endswith('s'):
+        return word[:-1]
+    if word.endswith('ing') and len(word)>5:
+        return word[:-3]
+    if word.endswith('ed') and len(word)>4:
+        return word[:-2]
+    return word
+
+
 def tokens(text):
-    return re.findall(r'[\w]+',text.lower())
+    return [stem(t) for t in re.findall(r'[\w]+',text.lower()) if t not in STOP]
 
 
 def chunks(text, size=1000, overlap=150):
@@ -32,7 +53,7 @@ def cosine(a,b):
     return sum(x*y for x,y in zip(a,b))/(na*nb)
 
 
-def search(query, candidates, top_k=5, query_vector=None):
+def search(query, candidates, top_k=5, query_vector=None, fuse=True):
     if not candidates:
         return []
     docs=[collections.Counter(tokens(c['text'])) for c in candidates]
@@ -52,5 +73,6 @@ def search(query, candidates, top_k=5, query_vector=None):
     for i,c in enumerate(candidates):
         if (query_vector is None and lexical[i]<=0) or (query_vector is not None and lexical[i]<=0 and semantic[i]<=.2):
             continue
-        result.append({**c,'score':1/(60+rank_a[i])+1/(60+rank_b[i]),'lexical_score':lexical[i],'vector_score':semantic[i]})
+        score=1/(60+rank_a[i])+1/(60+rank_b[i]) if fuse else lexical[i]
+        result.append({**c,'score':score,'lexical_score':lexical[i],'vector_score':semantic[i]})
     return sorted(result,key=lambda x:x['score'],reverse=True)[:top_k]

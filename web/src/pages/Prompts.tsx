@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import { useEffect, useState } from 'react';
 import { FileText } from 'lucide-react';
 import { api, type Row } from '../api';
