@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zyvor-nuvora"
+version = "0.1.0"
+description = "Private AI platform: models, knowledge, agents and governed workflows"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+authors = [{name = "Zyvor AI Labs"}]
+dependencies = []
+
+[project.optional-dependencies]
+aws = ["boto3>=1.35,<2"]
+
+[project.scripts]
+nuvora = "nuvora.server:main"
+nuvoractl = "nuvora.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["nuvora*"]
+
+[tool.setuptools.package-data]
+nuvora = ["static/*", "static/assets/*"]

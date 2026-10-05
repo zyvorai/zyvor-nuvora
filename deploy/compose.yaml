@@ -1,0 +1,20 @@
+services:
+  nuvora:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    # A TLS reverse proxy is required for remote access.
+    ports: ["127.0.0.1:8789:8789"]
+    command: ["--demo"]
+    environment:
+      NUVORA_ADMIN_PASSWORD: ${NUVORA_ADMIN_PASSWORD:?Set a 12+ character password}
+      NUVORA_BEHIND_TLS_PROXY: "1"
+      NUVORA_PROVIDER_HOSTS: ${NUVORA_PROVIDER_HOSTS:-localhost,127.0.0.1}
+    volumes: ["nuvora-data:/data"]
+    read_only: true
+    tmpfs: ["/tmp"]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    restart: unless-stopped
+volumes:
+  nuvora-data:

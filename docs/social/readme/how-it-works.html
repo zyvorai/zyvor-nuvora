@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Nuvora · How it works</title><link rel="stylesheet" href="card.css">
+<style>
+  .row { grid-template-columns:repeat(4,1fr); }
+  .card:not(:last-child)::after { content:"→"; position:absolute; right:-17px; top:50%; transform:translateY(-50%); font-size:20px; color:var(--faint); }
+</style></head>
+<body>
+<div class="aurora"></div>
+<div class="wrap">
+  <div class="top"><img src="../../../web/public/zyvor-mark.svg" alt=""><span><b>Nuvora</b> · How it works</span><span class="r">One request, end to end</span></div>
+  <h1>A question goes in. <em>An answer with receipts</em> comes out.</h1>
+  <div class="row">
+    <div class="card b1"><div class="lane">01 · ROUTE</div><h3>Pick a model you trust</h3><p>Requests go only to model endpoints on your allow-list: OpenAI-compatible (vLLM too), Ollama, Bedrock, or the offline demo.</p></div>
+    <div class="card b2"><div class="lane">02 · GROUND</div><h3>Retrieve the evidence</h3><p>Hybrid BM25 + vector search over your workspace’s knowledge bases, scoped per tenant.</p></div>
+    <div class="card b3"><div class="lane">03 · GUARD</div><h3>Check in and out</h3><p>Guardrails redact secrets and block policy hits before the model sees them, and again before you do.</p></div>
+    <div class="card b5"><div class="lane">04 · RECORD</div><h3>Write the evidence</h3><p>Citations, tokens, cost, and a hash-chained audit event, so anyone can verify what happened later.</p></div>
+  </div>
+  <div class="foot"><span><b>Python stdlib</b> server · <b>React</b> console · <b>SQLite</b> state</span><span class="r">zyvorai.github.io/zyvor-nuvora</span></div>
+</div>
+</body>
+</html>

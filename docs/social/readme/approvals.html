@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Nuvora · Approvals</title><link rel="stylesheet" href="card.css">
+<style>
+  .row { grid-template-columns:1.1fr 1fr 1.1fr; align-items:stretch; }
+  .state { display:inline-block; margin-top:14px; font-family:var(--mono); font-size:14px; font-weight:700; padding:5px 12px; border-radius:14px; background:color-mix(in srgb, var(--c) 18%, transparent); color:var(--c); }
+</style></head>
+<body>
+<div class="aurora"></div>
+<div class="wrap">
+  <div class="top"><img src="../../../web/public/zyvor-mark.svg" alt=""><span><b>Nuvora</b> · Approvals</span><span class="r">Separation of duties</span></div>
+  <h1>Agents propose. <em>People decide.</em> The chain remembers.</h1>
+  <div class="row">
+    <div class="card b3"><div class="lane">PROPOSE</div><h3>A step needs a human</h3><p>A workflow or agent hits a consequential action (send, write, spend) and pauses with full context attached.</p><span class="state">pending</span></div>
+    <div class="card b4"><div class="lane">DECIDE</div><h3>Someone else approves</h3><p>The author can’t approve their own request. Admins see the queue, with a dot in the nav.</p><span class="state">approver ≠ author</span></div>
+    <div class="card b5"><div class="lane">PROVE</div><h3>Every decision is chained</h3><p>The approval, the approver, and the outcome become a sha256-linked audit event you can verify from Evidence.</p><span class="state">chain verified</span></div>
+  </div>
+  <div class="foot"><span>Tenant-scoped · role-checked · <b>tamper-evident</b></span><span class="r">zyvorai.github.io/zyvor-nuvora</span></div>
+</div>
+</body>
+</html>

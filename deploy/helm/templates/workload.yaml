@@ -1,0 +1,108 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-data
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- if .Values.storage.className }}
+  storageClassName: {{ .Values.storage.className | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.storage.size }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app: {{ .Release.Name }}
+    app.kubernetes.io/name: nuvora
+    app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: {{ .Release.Name }}}
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}
+        app.kubernetes.io/name: nuvora
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+      - name: nuvora
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        {{- if or .Values.demo .Values.tls.existingSecret }}
+        args:
+        {{- if .Values.demo }}
+        - --demo
+        {{- end }}
+        {{- if .Values.tls.existingSecret }}
+        - --tls-cert=/tls/tls.crt
+        - --tls-key=/tls/tls.key
+        {{- end }}
+        {{- end }}
+        ports: [{name: http, containerPort: 8789}]
+        env:
+        - name: NUVORA_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef: {name: {{ .Values.adminSecret }}, key: password}
+        {{- if not .Values.tls.existingSecret }}
+        - {name: NUVORA_BEHIND_TLS_PROXY, value: "1"}
+        {{- end }}
+        {{- if .Values.allowDemoPassword }}
+        - {name: NUVORA_ALLOW_DEMO_PASSWORD, value: "1"}
+        {{- end }}
+        - name: NUVORA_PROVIDER_HOSTS
+          value: {{ .Values.providerHosts | quote }}
+        - {name: PYTHONDONTWRITEBYTECODE, value: "1"}
+        resources: {{ toYaml .Values.resources | nindent 10 }}
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities: {drop: [ALL]}
+        readinessProbe:
+          httpGet: {path: /healthz, port: http, scheme: {{ if .Values.tls.existingSecret }}HTTPS{{ else }}HTTP{{ end }}}
+        livenessProbe:
+          httpGet: {path: /healthz, port: http, scheme: {{ if .Values.tls.existingSecret }}HTTPS{{ else }}HTTP{{ end }}}
+        volumeMounts:
+        - {name: data, mountPath: /data}
+        - {name: tmp, mountPath: /tmp}
+        {{- if .Values.tls.existingSecret }}
+        - {name: tls, mountPath: /tls, readOnly: true}
+        {{- end }}
+      volumes:
+      - name: data
+        persistentVolumeClaim: {claimName: {{ .Release.Name }}-data}
+      - name: tmp
+        emptyDir: {}
+      {{- if .Values.tls.existingSecret }}
+      - name: tls
+        secret: {secretName: {{ .Values.tls.existingSecret }}, defaultMode: 0440}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app.kubernetes.io/name: nuvora
+spec:
+  type: {{ .Values.service.type }}
+  selector: {app: {{ .Release.Name }}}
+  ports:
+  - name: {{ if .Values.tls.existingSecret }}https{{ else }}http{{ end }}
+    port: {{ .Values.service.port }}
+    targetPort: http
+    {{- if and (eq .Values.service.type "NodePort") .Values.service.nodePort }}
+    nodePort: {{ .Values.service.nodePort }}
+    {{- end }}

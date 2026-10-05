@@ -1,0 +1,6 @@
+apiVersion: v2
+name: nuvora
+version: 0.1.0
+appVersion: 0.1.0
+description: Private AI application and governance platform
+type: application

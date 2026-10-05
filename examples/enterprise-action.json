@@ -1,0 +1,1 @@
+{"name":"Find orders at risk","description":"Read authorized order risk evidence","url":"https://operations.internal.example/orders/at-risk","method":"GET","key_env":"NUVORA_SECRET_OPERATIONS","input_schema":{"type":"object","properties":{"customer":{"type":"string"},"limit":{"type":"integer","minimum":1,"maximum":20}},"required":["customer"],"additionalProperties":false}}

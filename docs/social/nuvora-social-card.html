@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Nuvora social card</title>
+<!-- 1600x900 launch card. Build: ./docs/social/build.sh -> nuvora-social-card.jpg -->
+<style>
+  :root { --blue:#0071e3; --signal:#2997ff; --cyan:#64d2ff; --violet:#bf5af2; --green:#30d158; --amber:#ff9f0a;
+    --ink:#f5f5f7; --soft:#a1a1a6; --faint:#6e6e73; --line:rgba(255,255,255,.13);
+    --sans:-apple-system,'SF Pro Display','Helvetica Neue',Helvetica,Arial,sans-serif; --mono:'SF Mono',Menlo,Consolas,monospace; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; padding:0; }
+  body { width:1600px; height:900px; overflow:hidden; background:#000; color:var(--ink); font-family:var(--sans); position:relative; }
+  .aurora { position:absolute; inset:0;
+    background:radial-gradient(700px 480px at 50% 0%, rgba(0,113,227,.38), transparent 70%),
+               radial-gradient(500px 380px at 100% 100%, rgba(191,90,242,.22), transparent 65%),
+               radial-gradient(500px 380px at 0% 100%, rgba(48,209,88,.12), transparent 65%); }
+  .top { position:absolute; left:72px; right:72px; top:52px; display:flex; align-items:center; gap:14px;
+    font-family:var(--mono); font-size:16px; letter-spacing:.18em; text-transform:uppercase; color:var(--soft); }
+  .top img { width:34px; height:34px; } .top b { color:var(--ink); } .top .r { margin-left:auto; color:var(--signal); }
+  h1 { position:absolute; left:0; right:0; top:150px; margin:0; text-align:center; font-size:92px; line-height:1.02; font-weight:800; letter-spacing:-.045em; }
+  h1 em { font-style:normal; background:linear-gradient(92deg,var(--signal),var(--cyan) 50%,var(--violet)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .sub { position:absolute; left:0; right:0; top:368px; text-align:center; font-size:26px; color:var(--soft); }
+  .flow { position:absolute; left:72px; right:72px; top:462px; display:grid; grid-template-columns:repeat(5,1fr); gap:22px; }
+  .step { position:relative; padding:30px 24px 30px; border-radius:22px; background:rgba(29,29,31,.78); border:1px solid var(--line); }
+  .step::before { content:""; position:absolute; left:22px; right:22px; top:0; height:3px; border-radius:3px; background:var(--c); box-shadow:0 0 18px var(--c); }
+  .step:not(:last-child)::after { content:"→"; position:absolute; right:-19px; top:50%; transform:translateY(-50%); font-size:22px; color:var(--faint); }
+  .n { font-family:var(--mono); font-size:14px; letter-spacing:.14em; color:var(--c); font-weight:700; }
+  .step h3 { margin:12px 0 8px; font-size:31px; letter-spacing:-.02em; }
+  .step p { margin:0; font-size:18px; line-height:1.4; color:var(--soft); }
+  .s1 { --c:var(--signal); } .s2 { --c:var(--cyan); } .s3 { --c:var(--violet); } .s4 { --c:var(--amber); } .s5 { --c:var(--green); }
+  .foot { position:absolute; left:72px; right:72px; bottom:52px; display:flex; align-items:center; gap:12px; font-family:var(--mono); font-size:18px; color:var(--soft); }
+  .foot span { padding:8px 15px; border-radius:20px; border:1.5px solid var(--line); color:var(--ink); }
+  .foot span.b { background:var(--blue); border-color:var(--blue); color:#fff; box-shadow:0 0 26px rgba(0,113,227,.5); }
+  .foot .r { margin-left:auto; color:var(--ink); }
+</style>
+</head>
+<body>
+<div class="aurora"></div>
+<div class="top"><img src="../../web/public/zyvor-mark.svg" alt=""><span><b>Zyvor</b> · Nuvora</span><span class="r">Open source · Apache-2.0</span></div>
+<h1>Private AI that shows<br><em>its work.</em></h1>
+<div class="sub">One self-hosted console for models, knowledge, agents, and the people who approve them.</div>
+<div class="flow">
+  <div class="step s1"><div class="n">01 · CONNECT</div><h3>Models</h3><p>OpenAI-compatible (vLLM too), Ollama, Bedrock, or the offline demo. Allow-listed hosts only.</p></div>
+  <div class="step s2"><div class="n">02 · GROUND</div><h3>Knowledge</h3><p>Hybrid BM25 + vector retrieval. Every answer cites the passage it came from.</p></div>
+  <div class="step s3"><div class="n">03 · ACT</div><h3>Agents</h3><p>Tool-using agents and multi-step workflows with guardrails on input and output.</p></div>
+  <div class="step s4"><div class="n">04 · APPROVE</div><h3>People</h3><p>Consequential actions pause for a second person. Authors can’t approve themselves.</p></div>
+  <div class="step s5"><div class="n">05 · PROVE</div><h3>Evidence</h3><p>A hash-chained audit trail you can verify, plus usage and cost per workspace.</p></div>
+</div>
+<div class="foot"><span class="b">github.com/zyvorai/zyvor-nuvora</span><span>k3s · Helm · HTTPS</span><span>Python stdlib + React</span><span class="r">zyvorai.github.io/zyvor-nuvora</span></div>
+</body>
+</html>

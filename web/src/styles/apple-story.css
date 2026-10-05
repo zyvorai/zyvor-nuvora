@@ -1,0 +1,341 @@
+/* apple.com UX contract primitives, adapted from Zyvor Netra. Tokens live in styles.css. */
+/* —— Story tier —— */
+.apple-section {
+  width: min(1120px, 100% - 48px);
+  margin: 0 auto;
+  padding: 56px 0 40px;
+}
+.apple-section--tight { padding: 32px 0 24px; }
+.apple-section--hero { padding: 40px 0 28px; text-align: center; }
+
+.apple-eyebrow {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--apple-link);
+}
+
+.apple-display {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-h1);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.apple-lede {
+  margin: 16px 0 0;
+  max-width: 44ch;
+  font-size: var(--fs-lede);
+  line-height: 1.38;
+  letter-spacing: 0.005em;
+  color: var(--text-secondary);
+}
+.apple-section--hero .apple-lede { margin-inline: auto; }
+
+.apple-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+  margin-top: 28px;
+}
+.apple-section--hero .apple-cta-row { justify-content: center; }
+
+.apple-text-link {
+  color: var(--apple-link);
+  text-decoration: none;
+  font-size: var(--fs-link);
+}
+.apple-text-link:hover { text-decoration: underline; }
+
+.apple-story-stack { display: flex; flex-direction: column; gap: 40px; }
+
+/* Metric band: hairline-ruled figures instead of a wall of tiles. The child
+   structure <div><span>label</span><b>value</b></div> is load-bearing — the
+   browser smoke tests look values up as `div:has(> span) > b`. */
+.apple-metric-band {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  border-top: 1px solid var(--hairline-1);
+  border-bottom: 1px solid var(--hairline-1);
+}
+@media (min-width: 1024px) {
+  .apple-metric-band { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+.apple-metric-band > div {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 4px;
+  padding: 24px 20px;
+}
+.apple-metric-band > div > b {
+  font-family: var(--font-display);
+  font-size: var(--fs-figure);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+.apple-metric-band > div > span {
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+/* —— Browse tier —— */
+.toolbar-pill {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--hairline-1);
+  border-radius: var(--radius-pill);
+  background: var(--bg-glass);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+}
+.toolbar-pill .input-field { flex: 1 1 220px; border-radius: var(--radius-pill); }
+.toolbar-pill__trailing { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--hairline-1);
+  border-radius: var(--radius-xl);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-1);
+}
+.table-wrap table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table-wrap th {
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--hairline-1);
+}
+.table-wrap td { padding: 12px 16px; border-bottom: 1px solid var(--hairline-1); }
+.table-wrap tr:last-child td { border-bottom: 0; }
+.table-wrap tbody tr:hover { background: var(--surface-hover); }
+
+/* Inside a .card the card is already the frame: no second border/shadow (no
+   card-in-card), just the hairline row rules. */
+.card .table-wrap {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.card .table-wrap th:first-child,
+.card .table-wrap td:first-child { padding-left: 0; }
+
+.list-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+.list-empty h3 { margin: 0; font-size: var(--fs-h3); font-weight: 600; color: var(--text-primary); }
+.list-empty p { margin: 0; max-width: 40ch; }
+
+/* One input for every Browse/Work surface. */
+.input-field {
+  width: 100%;
+  min-height: var(--hit-min);
+  padding: 10px 14px;
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--fill-tertiary);
+  border: 1px solid var(--hairline-1);
+  border-radius: var(--radius-md);
+  transition: border-color 0.2s var(--ease-apple), box-shadow 0.2s var(--ease-apple);
+}
+.input-field::placeholder { color: var(--text-faint); }
+.input-field:focus-visible {
+  outline: none;
+  border-color: var(--apple-blue);
+  box-shadow: var(--focus-ring);
+}
+
+/* Form-control base (zero specificity via :where, so any container rule such as
+   .tokenbox input / .toolbar select still wins). Before this, only inputs inside
+   a handful of opted-in containers were styled; e.g. the Connections and
+   Workloads filter rows rendered as raw native controls. */
+:where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"], [type="hidden"]), select, textarea) {
+  font: inherit;
+  font-size: 15px;
+  color: var(--text-primary);
+  min-height: var(--hit-min);
+  padding: 10px 14px;
+  background: var(--fill-tertiary);
+  border: 1px solid var(--hairline-1);
+  border-radius: var(--radius-md);
+}
+:where(textarea) { min-height: 0; }
+:where(input, select, textarea)::placeholder { color: var(--text-faint); }
+:where(input[type="checkbox"], input[type="radio"]) { accent-color: var(--apple-blue); width: 18px; height: 18px; margin: 0; }
+/* A label wrapping a checkbox/radio reads as one inline control, not a stray box
+   floating away from its text. */
+label:has(> input[type="checkbox"]),
+label:has(> input[type="radio"]) {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--hit-min);
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+/* A label that wraps a select ("Diagnostic window [5 minutes]") sits on one row
+   with a gap instead of butting the control against its text. */
+label:has(> select) {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  color: var(--text-primary);
+}
+.toolbar label:has(> select) { flex-direction: column; align-items: flex-start; gap: 6px; font-size: 12px; color: var(--text-tertiary); }
+
+/* Checkboxes/radios keep their natural size everywhere. Older container rules
+   (.toolbar input { flex: 1 }, .tokenbox input { width: 100% }) were written
+   for text fields and stretched them into wide boxes far from their labels;
+   :root raises specificity just enough to win without !important. */
+:root input[type="checkbox"],
+:root input[type="radio"] {
+  flex: 0 0 auto;
+  width: 18px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  display: inline-block;
+}
+/* Card titles are <h2> (page h1 -> card h2 -> sub-heading h3) so the document
+   outline has no skipped level. Styled exactly like the .card h3 they replaced;
+   the bare `.card h2` rule (display-size, used for "Native connections") is a
+   different treatment and keeps winning where no .card-title is set. */
+.card h2.card-title {
+  margin: 0 0 1em;
+  font-size: var(--fs-h3);
+  letter-spacing: -0.01em;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+/* —— Overview (Story tier) —— */
+.overview-hero-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+  margin-top: 18px;
+}
+.overview-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border: 1px solid var(--hairline-1);
+  border-radius: var(--radius-pill);
+  background: var(--fill-tertiary);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.overview-status i,
+.overview-live i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  color: var(--text-faint);
+  flex: 0 0 auto;
+}
+.overview-status.tone-ok i,
+.overview-live i { color: var(--accent-green); animation: overviewPing 2s var(--ease-apple) infinite; }
+.overview-status.tone-warn i { color: var(--accent-amber); animation: overviewPing 2s var(--ease-apple) infinite; }
+.overview-status.tone-lease i { color: var(--apple-blue); animation: overviewPing 1.4s var(--ease-apple) infinite; }
+@keyframes overviewPing {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 50%, transparent); }
+  70%, 100% { box-shadow: 0 0 0 8px transparent; }
+}
+
+button.overview-link {
+  min-height: var(--hit-min);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--apple-link);
+  font-size: var(--fs-link);
+}
+button.overview-link:hover { background: none; text-decoration: underline; }
+
+.overview > .warning { margin: 0 0 12px; }
+
+.overview-stage {
+  position: relative;
+  margin: 12px 0 8px;
+  padding: 24px 24px 8px;
+  border: 1px solid var(--hairline-1);
+  border-radius: var(--radius-2xl);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+[data-theme="dark"] .overview-stage {
+  background:
+    radial-gradient(ellipse at 15% 0%, var(--hero-glow-a), transparent 55%),
+    radial-gradient(ellipse at 90% 100%, var(--hero-glow-b), transparent 50%),
+    var(--surface-1);
+}
+.overview-stage__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.overview-stage__head h2 {
+  margin: 0;
+  font-size: var(--fs-h2);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+.overview-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.overview-chapter {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  align-items: center;
+  gap: 20px 48px;
+  padding: 36px 0;
+  border-bottom: 1px solid var(--hairline-1);
+}
+.overview-chapter--flip .overview-chapter__copy { order: 2; }
+.overview-chapter h2 {
+  margin: 0 0 8px;
+  font-size: var(--fs-h2);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+.overview-chapter p { margin: 0; max-width: 52ch; font-size: var(--fs-body); color: var(--text-secondary); }
+.overview-chapter .apple-eyebrow { display: flex; align-items: center; font-size: 13px; }
+.overview-chapter__figures { margin-top: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 1200px) {
+  .overview-chapter__figures { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}

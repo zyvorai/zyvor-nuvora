@@ -1,0 +1,32 @@
+image:
+  repository: ghcr.io/zyvorai/zyvor-nuvora
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+# Secret with key `password`: the first administrator's password (first start only).
+adminSecret: nuvora-admin
+# Accept the Netra-style demo password Admin@321 for that first administrator.
+# Every other account still needs 12+ characters. Keep false outside labs.
+allowDemoPassword: false
+# Seed the offline demo workspace (synthetic model, knowledge base, agent, workflow).
+demo: false
+providerHosts: "localhost,127.0.0.1"
+service:
+  type: ClusterIP
+  port: 8789
+  # Only used when type is NodePort.
+  nodePort: ""
+# kubernetes.io/tls Secret served directly by Nuvora. Empty means plain HTTP behind
+# a TLS-terminating ingress or proxy (NUVORA_BEHIND_TLS_PROXY=1).
+tls:
+  existingSecret: ""
+storage:
+  size: 10Gi
+  className: ""
+resources:
+  requests: {cpu: 100m, memory: 128Mi}
+  limits: {cpu: "2", memory: 1Gi}
+ingress:
+  enabled: false
+  className: ""
+  host: nuvora.example.com
+  tlsSecret: nuvora-tls

@@ -1,0 +1,42 @@
+name: CI
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.11', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '${{ matrix.python }}'}
+      - run: python -m unittest discover -s tests -v
+  console:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - uses: actions/setup-node@v4
+        with: {node-version: '24', cache: npm, cache-dependency-path: web/package-lock.json}
+      - run: npm ci && npm run build && npm test
+        working-directory: web
+      - run: npm install --no-save --package-lock=false playwright && npx playwright install --with-deps chromium --only-shell
+      - run: |
+          NUVORA_ADMIN_PASSWORD=Nuvora-Test-Password-123 python -m nuvora.server --demo --db /tmp/nuvora-ci.db &
+          python scripts/wait-ready.py
+          node scripts/browser-smoke.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: console-screenshots, path: docs/screenshots}
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - run: helm lint deploy/helm
+      - run: helm template nuvora deploy/helm --set tls.existingSecret=nuvora-tls --set service.type=NodePort --set service.nodePort=30789 --set demo=true --set allowDemoPassword=true >/dev/null
+      - run: shellcheck -S warning scripts/deploy-remote.sh scripts/lib/deploy-guards.sh scripts/ci-deploy-guards.sh
+      - run: ./scripts/ci-deploy-guards.sh

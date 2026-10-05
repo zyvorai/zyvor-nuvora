@@ -1,0 +1,1 @@
+{"name":"Private embeddings","provider":"openai","upstream_model":"BAAI/bge-small-en-v1.5","base_url":"http://127.0.0.1:8001/v1","capability":"embedding","input_price":0,"output_price":0}

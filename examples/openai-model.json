@@ -1,0 +1,1 @@
+{"name":"Private Qwen","provider":"openai","upstream_model":"Qwen/Qwen3-8B","base_url":"http://127.0.0.1:8000/v1","key_env":"NUVORA_SECRET_VLLM","capability":"chat","input_price":0,"output_price":0}

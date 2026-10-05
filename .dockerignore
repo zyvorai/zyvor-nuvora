@@ -1,0 +1,7 @@
+.git
+web/node_modules
+*.db*
+__pycache__
+.venv
+.env
+docs/screenshots
