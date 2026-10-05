@@ -19,7 +19,7 @@ from nuvora.store import Store  # noqa: E402
 
 TABLES = {
     'objects': ('tenant', 'kind', 'id', 'data', 'revision', 'created', 'updated'),
-    'users': ('tenant', 'username', 'password', 'role', 'identity'),
+    'users': ('tenant', 'username', 'password', 'role', 'identity', 'groups'),
     'tokens': ('digest', 'tenant', 'username', 'role', 'expires', 'id', 'kind', 'label', 'created'),
     'audit': ('seq', 'tenant', 'event', 'previous', 'digest'),
     'usage': ('id', 'tenant', 'model', 'input_tokens', 'output_tokens', 'cost', 'latency_ms', 'cached', 'created', 'cached_tokens', 'saved'),

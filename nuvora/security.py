@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import hashlib
 import hmac
+import json
 import ipaddress
 import os
 import re
@@ -77,18 +78,21 @@ class Auth:
         self.store.audit(tenant,username,'session.created',username)
         return token
 
-    def sso_login(self, tenant, username, role, subject):
-        """Create or update a just-in-time SSO user, sync its role from the identity provider and open a session."""
+    def sso_login(self, tenant, username, role, subject, groups=()):
+        """Create or update a just-in-time SSO user, sync its role and groups from the identity provider and open a session."""
         actor='oidc:'+username
+        groups=json.dumps(clean_groups(groups))
         with self.store.transaction():
             row=self.store.db.execute('SELECT role,identity FROM users WHERE tenant=? AND username=?',(tenant,username)).fetchone()
             if row and row['identity']!=subject:
                 raise Fault('A local account already uses this username; ask an administrator to rename it',409)
             if not row:
                 # Unusable password: SSO users never sign in with one.
-                self.store.db.execute('INSERT INTO users (tenant,username,password,role,identity) VALUES (?,?,?,?,?)',
-                                      (tenant,username,password_hash(secrets.token_urlsafe(32)),role,subject))
-            elif row['role']!=role:
+                self.store.db.execute('INSERT INTO users (tenant,username,password,role,identity,groups) VALUES (?,?,?,?,?,?)',
+                                      (tenant,username,password_hash(secrets.token_urlsafe(32)),role,subject,groups))
+            else:
+                self.store.db.execute('UPDATE users SET groups=? WHERE tenant=? AND username=?',(groups,tenant,username))
+            if row and row['role']!=role:
                 self.store.db.execute('UPDATE users SET role=? WHERE tenant=? AND username=?',(role,tenant,username))
                 self.store.db.execute("UPDATE tokens SET role=? WHERE tenant=? AND username=? AND kind='session'",(role,tenant,username))
                 if role not in ('admin','developer'):
@@ -195,19 +199,49 @@ class Auth:
             self.store.db.execute('DELETE FROM tokens WHERE tenant=? AND username=?',(principal['tenant'],username))
         self.store.audit(principal['tenant'],principal['username'],'user.removed',username)
 
+    def set_groups(self, principal, username, groups):
+        require(principal,'admin')
+        groups=clean_groups(groups,strict=True)
+        with self.store.lock:
+            row=self.store.db.execute('SELECT identity FROM users WHERE tenant=? AND username=?',(principal['tenant'],username)).fetchone()
+            if not row:
+                raise KeyError('User not found')
+            if row['identity']:
+                raise Fault('Groups for single sign-on accounts come from the identity provider',409)
+            self.store.db.execute('UPDATE users SET groups=? WHERE tenant=? AND username=?',(json.dumps(groups),principal['tenant'],username))
+        self.store.audit(principal['tenant'],principal['username'],'user.groups_changed',username,{'groups':groups})
+        return groups
+
+    def groups(self, tenant, username):
+        with self.store.lock:
+            row=self.store.db.execute('SELECT groups FROM users WHERE tenant=? AND username=?',(tenant,username)).fetchone()
+        return json.loads(row['groups']) if row and row['groups'] else []
+
     def principal(self, token):
         if self.oidc and token.count('.')==2:
-            tenant,username,role,_=self.oidc.identity(self.oidc.verify(token))
-            return {'tenant':tenant,'username':username,'role':role,'source':'oidc'}
+            claims=self.oidc.verify(token)
+            tenant,username,role,_=self.oidc.identity(claims)
+            return {'tenant':tenant,'username':username,'role':role,'source':'oidc','groups':clean_groups(self.oidc.groups(claims))}
         with self.store.lock:
             row=self.store.db.execute('SELECT * FROM tokens WHERE digest=? AND expires>?',(hashlib.sha256(token.encode()).hexdigest(),time.time())).fetchone()
         if not row:
             raise Fault('Sign in required',401)
-        return {k:row[k] for k in ('tenant','username','role')}
+        return {**{k:row[k] for k in ('tenant','username','role')},'groups':self.groups(row['tenant'],row['username'])}
 
     def logout(self, token):
         with self.store.lock:
             self.store.db.execute('DELETE FROM tokens WHERE digest=?',(hashlib.sha256(token.encode()).hexdigest(),))
+
+
+def clean_groups(groups, strict=False):
+    """Up to 50 group names of 1–128 printable characters."""
+    if not isinstance(groups,(list,tuple)) or (strict and (len(groups)>50 or any(not isinstance(g,str) or not 1<=len(g.strip())<=128 for g in groups))):
+        raise Fault('groups must be a list of up to 50 names of 1–128 characters')
+    out=[]
+    for g in groups:
+        if isinstance(g,str) and 1<=len(g.strip())<=128 and g.strip() not in out and g.isprintable():
+            out.append(g.strip())
+    return out[:50]
 
 
 def require(p, *roles):

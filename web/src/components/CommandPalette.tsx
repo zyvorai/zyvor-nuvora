@@ -16,6 +16,7 @@ const RESOURCE_KINDS: [string, string][] = [
   ['agents', 'Agent'],
   ['actions', 'Action'],
   ['mcp_servers', 'MCP server'],
+  ['connectors', 'Connector'],
   ['workflows', 'Workflow'],
   ['prompts', 'Prompt'],
   ['policies', 'Guardrail'],

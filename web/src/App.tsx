@@ -35,7 +35,7 @@ import Batches from './pages/Batches';
 import Usage from './pages/Usage';
 import Audit from './pages/Audit';
 import Users from './pages/Users';
-import { Actions, McpServers, Models, Recipes, Routers } from './pages/Catalog';
+import { Actions, Connectors, McpServers, Models, Recipes, Routers } from './pages/Catalog';
 
 const pageHero: Partial<Record<Page, { title: string; lede: string; tint?: HeroTint }>> = {
   playground: { title: 'Ask. Ground. Verify.', lede: 'Choose a model, optionally ground it in a knowledge base, and see the exact passages behind every answer.' },
@@ -44,6 +44,7 @@ const pageHero: Partial<Record<Page, { title: string; lede: string; tint?: HeroT
   knowledge: { title: 'Answers start with evidence.', lede: 'Index documents with content digests, then inspect exactly what BM25 and vector fusion retrieve before a model sees it.', tint: 'green' },
   agents: { title: 'Give intelligence a purpose.', lede: 'Bounded model and tool loops with registered schemas. Memory writes and external actions pause for a different human.', tint: 'purple' },
   actions: { title: 'Connect the systems you trust.', lede: 'Typed enterprise APIs registered by an administrator. Writes wait for an exact-argument approval and never retry on their own.', tint: 'purple' },
+  connectors: { title: 'Knowledge that keeps itself current.', lede: 'Sync a website, an S3 prefix or a Confluence space into a knowledge base. Unchanged pages are skipped, changed ones re-indexed and removed ones dropped, with group access applied to every document.', tint: 'green' },
   mcp_servers: { title: 'Bring your tools. Keep the brakes.', lede: 'Connect Model Context Protocol servers over HTTP. Read-only servers run directly; every call to a writing server waits for a different person to approve it.', tint: 'purple' },
   workflows: { title: 'From a question to an approved outcome.', lede: 'Pinned DAG revisions with retrieval, generation, extraction and human review steps, checkpointed between nodes.', tint: 'purple' },
   prompts: { title: 'Version the instructions that matter.', lede: 'Templates with declared variables, optimistic revision edits and retained snapshots.' },
@@ -60,9 +61,9 @@ const pageHero: Partial<Record<Page, { title: string; lede: string; tint?: HeroT
   users: { title: 'The right access. The right workspace.', lede: 'Viewers read, developers propose, approvers decide, administrators manage. Every workspace is isolated.' },
 };
 
-const COLLECTIONS = ['models', 'routers', 'knowledge', 'agents', 'actions', 'mcp_servers', 'workflows', 'prompts', 'policies', 'evaluations', 'recipes', 'jobs', 'approvals'];
-const CREATABLE: Page[] = ['models', 'routers', 'agents', 'actions', 'mcp_servers', 'knowledge', 'workflows', 'prompts', 'policies', 'evaluations', 'recipes'];
-const ADMIN_ONLY: Page[] = ['models', 'policies', 'actions', 'mcp_servers'];
+const COLLECTIONS = ['models', 'routers', 'knowledge', 'connectors', 'agents', 'actions', 'mcp_servers', 'workflows', 'prompts', 'policies', 'evaluations', 'recipes', 'jobs', 'approvals'];
+const CREATABLE: Page[] = ['models', 'routers', 'agents', 'actions', 'mcp_servers', 'knowledge', 'connectors', 'workflows', 'prompts', 'policies', 'evaluations', 'recipes'];
+const ADMIN_ONLY: Page[] = ['models', 'policies', 'actions', 'mcp_servers', 'connectors'];
 
 export default function App() {
   return (
@@ -279,6 +280,7 @@ function Console() {
     agents: <Agents rows={rows} canWrite={canWrite} act={act} />,
     actions: <Actions rows={rows} act={act} isAdmin={principal.role === 'admin'} />,
     mcp_servers: <McpServers rows={rows} />,
+    connectors: <Connectors rows={rows} knowledge={collections.knowledge || []} act={act} isAdmin={principal.role === 'admin'} onQueued={() => navigate('jobs')} />,
     workflows: <Workflows rows={rows} />,
     prompts: <Prompts rows={rows} canWrite={canWrite} act={act} selected={prompt} onSelect={setPrompt} onEdit={() => prompt && setEditor({ kind: 'prompts', existing: prompt })} evaluations={collections.evaluations || []} onQueued={() => navigate('jobs')} />,
     recipes: <Recipes rows={rows} act={act} />,

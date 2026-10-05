@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);
 COLUMNS = [
     ('usage', 'cached_tokens', 'INTEGER NOT NULL DEFAULT 0'),
     ('usage', 'saved', 'REAL NOT NULL DEFAULT 0'),
+    ('users', 'groups', "TEXT NOT NULL DEFAULT ''"),
 ]
 
 

@@ -138,7 +138,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             claims=provider.callback(self.base_url(),self.query(),self.cookie(sso.STATE_COOKIE))
-            token=app.auth.sso_login(*provider.identity(claims))
+            token=app.auth.sso_login(*provider.identity(claims),provider.groups(claims))
         except Fault as exc:
             self.redirect('/?sso_error='+quote(str(exc)[:200]),[clear])
             return
@@ -315,8 +315,13 @@ class Handler(BaseHTTPRequestHandler):
             if path.startswith('/api/users/'):
                 username=path.split('/',3)[3]
                 if method=='POST':
-                    app.auth.set_role(p,username,body.get('role'))
-                    self.respond(200,{'username':username,'role':body.get('role')})
+                    out={'username':username}
+                    if 'groups' in body:
+                        out['groups']=app.auth.set_groups(p,username,body['groups'])
+                    if 'role' in body or 'groups' not in body:
+                        app.auth.set_role(p,username,body.get('role'))
+                        out['role']=body.get('role')
+                    self.respond(200,out)
                 elif method=='DELETE':
                     app.auth.remove_user(p,username)
                     self.respond(200,{'ok':True})
@@ -331,8 +336,8 @@ class Handler(BaseHTTPRequestHandler):
                     self.respond(201,{'username':body['username'],'role':body['role']})
                 else:
                     with app.store.lock:
-                        rows=app.store.db.execute("SELECT username,role,CASE WHEN identity='' THEN 'password' ELSE 'sso' END AS source FROM users WHERE tenant=?",(p['tenant'],)).fetchall()
-                    self.respond(200,{'users':[dict(r) for r in rows]})
+                        rows=app.store.db.execute("SELECT username,role,groups,CASE WHEN identity='' THEN 'password' ELSE 'sso' END AS source FROM users WHERE tenant=?",(p['tenant'],)).fetchall()
+                    self.respond(200,{'users':[{**dict(r),'groups':json.loads(r['groups']) if r['groups'] else []} for r in rows]})
                 return
             if path=='/v1/chat/completions' and method=='POST' and body.get('stream'):
                 self.sse(openai_chunks(app.open_stream(p,{k:v for k,v in body.items() if k!='stream'})),openai=True)
@@ -351,7 +356,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path=='/api/answer' and method=='POST':
                 require(p,'developer','admin')
-                citations=app.retrieve(p,body.get('knowledge_ids',[]),body.get('question',''),body.get('top_k',5))
+                citations=app.retrieve(p,body.get('knowledge_ids',[]),body.get('question',''),body.get('top_k',5),body.get('filter'))
                 if not citations:
                     self.respond(200,{'answer':'No relevant evidence found.','citations':[],'generated':False})
                     return
@@ -368,7 +373,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.respond(200,{'baseline_score':a['result']['score'],'candidate_score':b['result']['score'],'delta':b['result']['score']-a['result']['score'],'release_allowed':b['result']['release_allowed'] and b['result']['score']>=a['result']['score']})
                 return
             if path=='/api/retrieve' and method=='POST':
-                self.respond(200,{'citations':app.retrieve(p,body.get('knowledge_ids',[]),body.get('query',''),body.get('top_k',5))})
+                self.respond(200,{'citations':app.retrieve(p,body.get('knowledge_ids',[]),body.get('query',''),body.get('top_k',5),body.get('filter'))})
                 return
             if path=='/api/actions/import-openapi' and method=='POST':
                 self.respond(201,app.import_openapi(p,body))
@@ -413,6 +418,8 @@ class Handler(BaseHTTPRequestHandler):
                         if subject is not None and (not isinstance(subject,str) or len(subject)>200):
                             raise Fault('subject must be a string of at most 200 characters')
                         self.respond(200,app.render_prompt(p,id,body.get('variables',{}),body.get('variant'),subject)); return
+                    if kind=='connectors' and action=='sync':
+                        self.respond(202,app.new_job(p,'sync',id,body,self.headers.get('Idempotency-Key'))); return
                     if kind=='prompts' and action=='experiment':
                         self.respond(202,app.new_job(p,'experiment',id,body,self.headers.get('Idempotency-Key'))); return
                     if kind=='recipes' and action=='export':

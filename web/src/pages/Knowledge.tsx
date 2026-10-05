@@ -6,6 +6,7 @@ import { Card, Field, ListEmpty } from '../components/kit';
 import type { Act } from '../lib/types';
 import { usePageActions } from '../lib/pageContext';
 import { ExtractCard } from '../components/ExtractCard';
+import { formatMeta, parseFilter, parseMeta, splitGroups } from '../lib/meta';
 
 const ACCEPT = '.txt,.md,.markdown,.json,.csv,.html,.htm,.docx,.pdf,.png,.jpg,.jpeg,.webp,.mp3,.wav,.m4a,.ogg,.webm,.flac';
 const MAX_BYTES = 20 * 1024 * 1024;
@@ -50,6 +51,12 @@ export default function Knowledge({ rows, models, canWrite, act, refresh }: { ro
   const [query, setQuery] = useState('');
   const [result, setResult] = useState<Row[]>([]);
   const [confirm, setConfirm] = useState('');
+  const [metaText, setMetaText] = useState('');
+  const [groupText, setGroupText] = useState('');
+  const [filterText, setFilterText] = useState('');
+  const meta = parseMeta(metaText);
+  const filter = parseFilter(filterText);
+  const access = () => ({ ...(Object.keys(meta.meta).length ? { metadata: meta.meta } : {}), ...(groupText.trim() ? { groups: splitGroups(groupText) } : {}) });
   const input = useRef<HTMLInputElement>(null);
   const id = selected || rows[0]?.id || '';
   const page = usePageActions();
@@ -63,7 +70,7 @@ export default function Knowledge({ rows, models, canWrite, act, refresh }: { ro
   useEffect(load, [load, refresh]);
 
   async function uploadFiles(files: File[]) {
-    if (!files.length || !canWrite) return;
+    if (!files.length || !canWrite || meta.error) return;
     const queued = files.map((f, i) => ({ key: `${Date.now()}-${i}-${f.name}`, name: f.name, state: 'queued' as const }));
     setItems((prev) => [...queued, ...prev].slice(0, 12));
     const update = (key: string, patch: Partial<Item>) => setItems((prev) => prev.map((x) => (x.key === key ? { ...x, ...patch } : x)));
@@ -75,7 +82,7 @@ export default function Knowledge({ rows, models, canWrite, act, refresh }: { ro
       }
       update(key, { state: 'uploading' });
       try {
-        const r = await api('/api/knowledge/' + id + '/upload', { name: file.name, content_type: file.type, content_base64: await base64(file) });
+        const r = await api('/api/knowledge/' + id + '/upload', { name: file.name, content_type: file.type, content_base64: await base64(file), ...access() });
         update(key, { state: 'done', note: `${r.characters?.toLocaleString() ?? ''} characters · ${String(r.digest).slice(0, 10)}…` });
       } catch (e) {
         update(key, { state: 'error', note: String(e instanceof Error ? e.message : e) });
@@ -92,7 +99,8 @@ export default function Knowledge({ rows, models, canWrite, act, refresh }: { ro
 
   async function ingest(e: FormEvent) {
     e.preventDefault();
-    const r = await act(() => api('/api/knowledge/' + id + '/ingest', { name, text }), 'Document indexed');
+    if (meta.error) return;
+    const r = await act(() => api('/api/knowledge/' + id + '/ingest', { name, text, ...access() }), 'Document indexed');
     if (r) {
       setText('');
       setName('');
@@ -102,7 +110,8 @@ export default function Knowledge({ rows, models, canWrite, act, refresh }: { ro
 
   async function retrieve(e: FormEvent) {
     e.preventDefault();
-    const r = await act(() => api('/api/retrieve', { knowledge_ids: [id], query }));
+    if (filter.error) return;
+    const r = await act(() => api('/api/retrieve', { knowledge_ids: [id], query, ...(filter.filter ? { filter: filter.filter } : {}) }));
     if (r) setResult(r.citations);
   }
 
@@ -178,6 +187,18 @@ export default function Knowledge({ rows, models, canWrite, act, refresh }: { ro
             }}
           />
         </div>
+        <details className="access-fields">
+          <summary>Metadata and access for new documents</summary>
+          <div className="form-grid">
+            <Field label="Metadata · key=value per line">
+              <textarea rows={2} value={metaText} onChange={(e) => setMetaText(e.target.value)} aria-invalid={!!meta.error} placeholder="team=ops&#10;year=2026" />
+            </Field>
+            <Field label="Visible to groups (comma-separated; empty for everyone)">
+              <input value={groupText} onChange={(e) => setGroupText(e.target.value)} placeholder="finance" />
+            </Field>
+          </div>
+          {meta.error && <p className="note danger-text">{meta.error}</p>}
+        </details>
         {items.length > 0 && (
           <ul className="upload-list" aria-label="Uploads">
             {items.map((x) => (
@@ -216,8 +237,10 @@ export default function Knowledge({ rows, models, canWrite, act, refresh }: { ro
                   <div>
                     <b>{d.name}</b>
                     <small>
-                      <span className="type-badge">{fileType(d.content_type)}</span> {d.extraction && d.extraction !== 'text' && <span className="type-badge">{d.extraction}</span>} {bytes(d.bytes)} · {d.chunks} chunks · {ago(d.updated)} · <code>{String(d.digest).slice(0, 10)}</code>
+                      <span className="type-badge">{fileType(d.content_type)}</span> {d.extraction && d.extraction !== 'text' && <span className="type-badge">{d.extraction}</span>}{' '}
+                      {d.groups?.length > 0 && <span className="type-badge" title="Visible to these groups and administrators">{d.groups.join(', ')}</span>} {bytes(d.bytes)} · {d.chunks} chunks · {ago(d.updated)} · <code>{String(d.digest).slice(0, 10)}</code>
                     </small>
+                    {d.metadata && <small className="muted">{formatMeta(d.metadata).replaceAll('\n', ' · ')}</small>}
                   </div>
                   {canWrite &&
                     (confirm === d.id ? (
@@ -244,6 +267,10 @@ export default function Knowledge({ rows, models, canWrite, act, refresh }: { ro
             <Field label="Search your knowledge">
               <input value={query} onChange={(e) => setQuery(e.target.value)} required />
             </Field>
+            <Field label="Metadata filter (optional) · key=value or key=a|b per line">
+              <textarea rows={2} value={filterText} onChange={(e) => setFilterText(e.target.value)} aria-invalid={!!filter.error} />
+            </Field>
+            {filter.error && <p className="note danger-text">{filter.error}</p>}
             <button type="submit" className="btn-secondary">
               <Search size={15} />
               Retrieve evidence

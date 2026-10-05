@@ -7,26 +7,70 @@ import re
 import secrets
 import threading
 import traceback
+import os
 import time
 from .store import canonical
 from .security import CLASSIFIER_CATEGORIES, Fault, guard, require, validate_policy
 from .providers import DATA_IMAGE, Providers, text_of
 from .retrieval import chunks, search
-from . import actions, mcp_client, telemetry
+from . import actions, connectors, mcp_client, telemetry
 from . import ingest as parsers
 from .integrations import Integrations, TOOLS as INTEGRATION_TOOLS
 
-KINDS=('actions','models','knowledge','documents','agents','prompts','policies','workflows','evaluations','recipes','routers','mcp_servers','memory','jobs','approvals')
-WRITABLE=('actions','models','knowledge','agents','prompts','policies','workflows','evaluations','recipes','routers','mcp_servers')
+KINDS=('actions','models','knowledge','documents','agents','prompts','policies','workflows','evaluations','recipes','routers','mcp_servers','connectors','memory','jobs','approvals')
+WRITABLE=('actions','models','knowledge','agents','prompts','policies','workflows','evaluations','recipes','routers','mcp_servers','connectors')
+ADMIN_KINDS=('models','policies','actions','mcp_servers','connectors')
+META_KEY=re.compile(r'[a-z][a-z0-9_]{0,39}')
 UNSURE=re.compile(r"\b(i\s+(do\s+not|don't)\s+know|i'?m\s+not\s+sure|i\s+am\s+not\s+sure|i\s+cannot\s+(answer|help)|i\s+can't\s+(answer|help)|unable\s+to\s+answer|not\s+enough\s+information)\b",re.I)
 TOOLS={
- 'knowledge_search':{'description':'Search permitted knowledge in this tenant','parameters':{'type':'object','properties':{'query':{'type':'string'}},'required':['query'],'additionalProperties':False}},
+ 'knowledge_search':{'description':'Search permitted knowledge in this tenant. Optional filter on document metadata: {"key": value} or {"key": {"in": [values]}}',
+                     'parameters':{'type':'object','properties':{'query':{'type':'string'},'filter':{'type':'object'}},'required':['query'],'additionalProperties':False}},
  'list_models':{'description':'List tenant model identities','parameters':{'type':'object','properties':{},'additionalProperties':False}},
  'memory_read':{'description':'Read memory for this agent session','parameters':{'type':'object','properties':{},'additionalProperties':False}},
  'memory_search':{'description':'Search your long-term memory across past sessions','parameters':{'type':'object','properties':{'query':{'type':'string'}},'required':['query'],'additionalProperties':False}},
  'memory_write':{'description':'Propose a durable session memory update; requires human approval','parameters':{'type':'object','properties':{'text':{'type':'string'}},'required':['text'],'additionalProperties':False}}
 }
 ALL_TOOLS={**TOOLS,**INTEGRATION_TOOLS}
+
+
+def validate_metadata(metadata):
+    if metadata is None:
+        return {}
+    if not isinstance(metadata,dict) or len(metadata)>20:
+        raise Fault('metadata must be an object with at most 20 keys')
+    for key,value in metadata.items():
+        if not META_KEY.fullmatch(key) or not (isinstance(value,(bool,int)) or (isinstance(value,float) and math.isfinite(value)) or (isinstance(value,str) and len(value)<=200)):
+            raise Fault('metadata keys are lowercase identifiers; values are strings up to 200 characters, numbers or booleans')
+    return metadata
+
+
+def validate_filter(spec):
+    """{key: value} equality or {key: {"in": [values]}} membership, all keys must match."""
+    if spec is None:
+        return None
+    if not isinstance(spec,dict) or len(spec)>10:
+        raise Fault('filter must be an object with at most 10 keys')
+    for key,cond in spec.items():
+        values=cond['in'] if isinstance(cond,dict) and set(cond)=={'in'} and isinstance(cond['in'],list) and len(cond['in'])<=50 else [cond]
+        if not META_KEY.fullmatch(key) or isinstance(cond,dict) and values==[cond] or any(isinstance(v,(dict,list)) for v in values):
+            raise Fault('filter values must be scalars or {"in": [scalars]}')
+    return spec
+
+
+def matches(metadata,spec):
+    if not spec:
+        return True
+    for key,cond in spec.items():
+        values=cond['in'] if isinstance(cond,dict) else [cond]
+        if key not in metadata or metadata[key] not in values:
+            return False
+    return True
+
+
+def visible(p,doc):
+    """Documents with groups are visible to members of any listed group, and to administrators."""
+    groups=doc.get('groups') or []
+    return not groups or p.get('role')=='admin' or bool(set(groups)&set(p.get('groups') or []))
 
 
 def render(template,outputs):
@@ -43,6 +87,8 @@ class Platform:
         self.stop=threading.Event()
         self.instance=secrets.token_hex(8)
         self.integrations=Integrations(self.providers.allowed_hosts)
+        self.connector_hosts={h.strip().lower() for h in os.getenv('NUVORA_CONNECTOR_HOSTS','').split(',') if h.strip()}
+        self.s3_factory=None
 
     def tools(self,p=None):
         out={k:v for k,v in ALL_TOOLS.items() if k in TOOLS or k in self.integrations.available_tools()}
@@ -57,18 +103,22 @@ class Platform:
     def get(self,p,kind,id):
         if kind not in KINDS:
             raise Fault('Unknown collection',404)
-        return self.store.get(p['tenant'],kind,id)
+        item=self.store.get(p['tenant'],kind,id)
+        if kind=='documents' and not visible(p,item):
+            raise KeyError(id)
+        return item
 
     def list(self,p,kind):
         if kind not in KINDS:
             raise Fault('Unknown collection',404)
-        return self.store.list(p['tenant'],kind)
+        items=self.store.list(p['tenant'],kind)
+        return [d for d in items if visible(p,d)] if kind=='documents' else items
 
     def create(self,p,kind,data,id=None):
         require(p,'developer','admin')
         if kind not in WRITABLE:
             raise Fault('Collection cannot be written directly')
-        if kind in ('models','policies','actions','mcp_servers'):
+        if kind in ADMIN_KINDS:
             require(p,'admin')
         data=self.validate(p,kind,data)
         if id is not None and 'expected_revision' not in data:
@@ -88,6 +138,7 @@ class Platform:
             'knowledge':{'embedding_model','retrieval','rerank_model','ocr_model','transcription_model'},
             'agents':{'model','knowledge_ids','tools','max_steps','system_prompt','summarize_memory'},
             'mcp_servers':{'url','key_env','readonly','tools','catalog','available'},
+            'connectors':{'type','knowledge_id','url','depth','max_pages','bucket','prefix','region','space','username','key_env','metadata','groups','interval_minutes'},
             'prompts':{'template','variables','variants'},
             'policies':{'max_chars','daily_tokens','blocked_topics','redact_pii','detect_injection','word_filters','regex_filters','pii_entities',
                          'grounding_threshold','classifier_model','classifier_categories','classifier_threshold','cache_ttl'},
@@ -281,6 +332,8 @@ class Platform:
             if not isinstance(score,(int,float)) or not 0<=score<=1:
                 raise Fault('min_score must be between 0 and 1')
             data['min_score']=score
+        elif kind=='connectors':
+            self.validate_connector(p,data)
         elif kind=='recipes':
             self.get(p,'models',data['model'])
             if data.get('method') not in ('lora','qlora','distillation','evaluation','quantization'):
@@ -288,19 +341,58 @@ class Platform:
             data['status']='exportable recipe; no training executed'
         return data
 
+    def validate_connector(self,p,data):
+        from .security import clean_groups, validate_url
+        if data.get('type') not in connectors.TYPES:
+            raise Fault('Connector type must be web, s3 or confluence')
+        self.get(p,'knowledge',data.get('knowledge_id',''))
+        limit=200 if data['type']=='web' else 500
+        data['max_pages']=data.get('max_pages',25 if data['type']=='web' else 100)
+        if not isinstance(data['max_pages'],int) or not 1<=data['max_pages']<=limit:
+            raise Fault(f'max_pages must be between 1 and {limit}')
+        if data['type'] in ('web','confluence'):
+            if not self.connector_hosts:
+                raise Fault('The operator has not allowed any connector hosts (NUVORA_CONNECTOR_HOSTS)',403)
+            validate_url(str(data.get('url','')),self.connector_hosts)
+        if data['type']=='web':
+            data['depth']=data.get('depth',1)
+            if not isinstance(data['depth'],int) or not 0<=data['depth']<=3:
+                raise Fault('depth must be between 0 and 3')
+        elif data['type']=='confluence':
+            if not re.fullmatch(r'[A-Za-z0-9_~-]{1,64}',str(data.get('space',''))):
+                raise Fault('A Confluence space key is required')
+            if not str(data.get('key_env','')).startswith('NUVORA_SECRET_'):
+                raise Fault('Confluence credentials need a NUVORA_SECRET_ environment reference')
+            if data.get('username') is not None and (not isinstance(data['username'],str) or len(data['username'])>200):
+                raise Fault('username must be at most 200 characters')
+        else:
+            if not re.fullmatch(r'[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]',str(data.get('bucket',''))):
+                raise Fault('A valid S3 bucket name is required')
+            if not isinstance(data.get('prefix',''),str) or len(data.get('prefix',''))>500:
+                raise Fault('prefix must be at most 500 characters')
+            if data.get('region') is not None and not re.fullmatch(r'[a-z0-9-]{1,30}',str(data['region'])):
+                raise Fault('Invalid AWS region')
+        data['metadata']=validate_metadata(data.get('metadata'))
+        data['groups']=clean_groups(data.get('groups',[]),strict=True)
+        interval=data.get('interval_minutes')
+        if interval is not None and (not isinstance(interval,int) or not 15<=interval<=10080):
+            raise Fault('interval_minutes must be between 15 and 10080, or empty for manual sync')
+
     def delete(self,p,kind,id):
         require(p,'admin')
         if kind not in WRITABLE:
             raise Fault('Collection cannot be deleted directly')
         self.get(p,kind,id)
         if kind=='models':
-            if any(x.get('model')==id or x.get('embedding_model')==id for k in ('agents','knowledge','evaluations','recipes') for x in self.list(p,k)) \
+            if any(id in (x.get('model'),x.get('embedding_model'),x.get('rerank_model'),x.get('ocr_model'),x.get('transcription_model')) for k in ('agents','knowledge','evaluations','recipes') for x in self.list(p,k)) \
                     or any(id in r.get('models',[]) or r.get('judge_model')==id for r in self.list(p,'routers')) \
                     or any(x.get('classifier_model')==id for x in self.list(p,'policies')):
                 raise Fault('Model is referenced by another resource',409)
+        if kind=='knowledge' and any(c['knowledge_id']==id for c in self.list(p,'connectors')):
+            raise Fault('Knowledge base is fed by a connector; delete the connector first',409)
         with self.store.transaction():
             if kind=='knowledge':
-                for d in self.list(p,'documents'):
+                for d in self.store.list(p['tenant'],'documents'):
                     if d['knowledge_id']==id:
                         self.store.delete(p['tenant'],'documents',d['id'])
             self.store.delete(p['tenant'],kind,id)
@@ -422,6 +514,7 @@ class Platform:
         if not text:
             raise Fault('No text could be extracted from this file',422)
         return self.ingest(p,kb_id,{'name':name,'text':text,'source':'upload','content_type':detected,'bytes':len(data),'extraction':extraction,
+                                    'metadata':body.get('metadata'),'groups':body.get('groups',[]),
                                     'chunk_size':body.get('chunk_size',1000),'overlap':body.get('overlap',150)})
 
     OCR_PROMPT=('Transcribe all text visible in this image verbatim, in reading order. Render tables as rows of cells separated by " | ". '
@@ -806,6 +899,11 @@ class Platform:
         name=body.get('name','Untitled')
         if not isinstance(name,str) or not 1<=len(name)<=200:
             raise Fault('Invalid document name')
+        from .security import clean_groups
+        metadata=validate_metadata(body.get('metadata'))
+        groups=clean_groups(body.get('groups') or [],strict=True)
+        if groups and p['role']!='admin' and not set(groups)&set(p.get('groups') or []):
+            raise Fault('Restrict documents only to groups you belong to',403)
         verdict=guard(text,self.policy(p))
         if not verdict['allowed']:
             raise Fault('Document refused by guardrail',422)
@@ -819,19 +917,29 @@ class Platform:
                 for c,v in zip(batch,embeddings):
                     c['embedding']=v
         digest=hashlib.sha256(content.encode()).hexdigest()
-        existing=next((d for d in self.list(p,'documents') if d['knowledge_id']==kb_id and d['name']==name),None)
+        existing=next((d for d in self.store.list(p['tenant'],'documents') if d['knowledge_id']==kb_id and d['name']==name),None)
+        if existing and not visible(p,existing):
+            raise Fault('A document with this name exists and is restricted',409)
         with self.store.transaction():
             record={'name':name,'knowledge_id':kb_id,'text':content,'chunks':split,'digest':digest,'source':body.get('source','manual'),'embedding_model':kb.get('embedding_model'),
                     'content_type':body.get('content_type','text/plain'),'characters':len(content),'extraction':body.get('extraction','text') if body.get('extraction') in ('text','ocr','transcription') else 'text'}
             if body.get('bytes'):
                 record['bytes']=body['bytes']
+            if metadata:
+                record['metadata']=metadata
+            if groups:
+                record['groups']=groups
+            for key in ('connector','version','source_digest','url'):
+                if body.get(key):
+                    record[key]=body[key]
             doc=self.store.put(p['tenant'],'documents',record,existing['id'] if existing else None)
             self.store.audit(p['tenant'],p['username'],'document.ingested',doc['id'],{'digest':digest,'chunks':len(split)})
         return {k:v for k,v in doc.items() if k not in ('text','chunks')}
 
-    def retrieve(self,p,kb_ids,query,top_k=5):
+    def retrieve(self,p,kb_ids,query,top_k=5,filter=None):
         if not isinstance(query,str) or not 1<=len(query)<=10000 or not isinstance(top_k,int) or not 1<=top_k<=20:
             raise Fault('Invalid retrieval query or top_k')
+        filter=validate_filter(filter)
         if not kb_ids:
             return []
         bases=[self.get(p,'knowledge',id) for id in kb_ids]
@@ -840,10 +948,11 @@ class Platform:
         for kb in bases:
             subset=[]
             for d in docs:
-                if d['knowledge_id']==kb['id']:
+                if d['knowledge_id']==kb['id'] and matches(d.get('metadata') or {},filter):
                     if d.get('embedding_model')!=kb.get('embedding_model'):
                         raise Fault('Embedding configuration changed; reingest documents',409)
-                    subset.extend({**c,'document_id':d['id'],'document':d['name'],'source':d['source'],'digest':d['digest'],'knowledge_id':kb['id']} for c in d['chunks'])
+                    subset.extend({**c,'document_id':d['id'],'document':d['name'],'source':d['source'],'digest':d['digest'],'knowledge_id':kb['id'],
+                                   **({'metadata':d['metadata']} if d.get('metadata') else {})} for c in d['chunks'])
             qv=self.providers.embed(self.get(p,'models',kb['embedding_model']),[query])[0] if kb.get('embedding_model') else None
             candidates.extend(search(query,subset,max(top_k,20) if kb.get('rerank_model') else top_k,qv))
         ranked=sorted(candidates,key=lambda c:c['score'],reverse=True)
@@ -905,9 +1014,11 @@ class Platform:
 
     def new_job(self,p,kind,target,body,idempotency=None):
         require(p,'developer','admin')
-        if kind not in ('agent','workflow','evaluation','batch','experiment','extract'):
+        if kind not in ('agent','workflow','evaluation','batch','experiment','extract','sync'):
             raise Fault('Unknown job type')
-        collection={'agent':'agents','workflow':'workflows','evaluation':'evaluations','experiment':'prompts'}.get(kind)
+        collection={'agent':'agents','workflow':'workflows','evaluation':'evaluations','experiment':'prompts','sync':'connectors'}.get(kind)
+        if kind=='sync':
+            require(p,'admin')
         spec=self.get(p,collection,target) if collection else None
         if kind=='experiment':
             if not spec.get('variants'):
@@ -1019,7 +1130,7 @@ class Platform:
         if not isinstance(args,dict) or set(args)-set(TOOLS[name]['parameters']['properties']) or any(k not in args for k in TOOLS[name]['parameters'].get('required',[])):
             raise Fault('Invalid tool arguments')
         if name=='knowledge_search':
-            return self.retrieve(p,agent.get('knowledge_ids',[]),args['query'])
+            return self.retrieve(p,agent.get('knowledge_ids',[]),args['query'],5,args.get('filter'))
         if name=='list_models':
             return [{'id':m['id'],'name':m['name'],'provider':m['provider']} for m in self.list(p,'models')]
         if name=='memory_read':
@@ -1213,6 +1324,64 @@ class Platform:
         except (ValueError,TypeError,KeyError):
             return {'score':0.0,'reason':'Judge returned malformed output','judge':model['id'],'malformed':True}
 
+    def run_sync(self,p,job):
+        """Incremental connector sync: skip unchanged versions or digests, update changed items, remove vanished ones."""
+        spec=self.get(p,'connectors',job['target'])
+        existing={d['name']:d for d in self.store.list(p['tenant'],'documents') if d.get('connector')==spec['id']}
+        counts={'added':0,'updated':0,'unchanged':0,'removed':0}
+        skipped,failed,seen=[],[],set()
+        client=self.s3_factory(spec) if spec['type']=='s3' and self.s3_factory else None
+        for item in connectors.items(spec,self.connector_hosts,skipped,client):
+            name=item['name']
+            if name in seen:
+                continue
+            seen.add(name)
+            old=existing.get(name)
+            if old and item.get('version') and old.get('version')==item['version']:
+                counts['unchanged']+=1
+                continue
+            try:
+                text=re.sub(r'\n{3,}','\n\n',item['load']()).strip()[:500000]
+                if not text:
+                    raise Fault('no text')
+                digest=hashlib.sha256(text.encode()).hexdigest()
+                if old and old.get('source_digest')==digest:
+                    counts['unchanged']+=1
+                    continue
+                metadata={**spec.get('metadata',{}),'connector':spec['name'][:200],**({'title':item['title']} if item.get('title') else {})}
+                self.ingest(p,spec['knowledge_id'],{'name':name,'text':text,'source':'connector:'+spec['type'],'connector':spec['id'],'url':item.get('url'),
+                                                    'version':item.get('version'),'source_digest':digest,'content_type':item.get('content_type','text/plain'),
+                                                    'metadata':metadata,'groups':spec.get('groups',[])})
+                counts['updated' if old else 'added']+=1
+            except Exception as exc:
+                failed.append({'item':name,'reason':str(exc) if isinstance(exc,Fault) else 'read failed'})
+        if seen:
+            for name,doc in existing.items():
+                if name not in seen:
+                    self.delete_document(p,doc['id'])
+                    counts['removed']+=1
+        result={**counts,'skipped':skipped[:50],'failed':failed[:50],'seen':len(seen)}
+        with self.store.transaction():
+            current=self.store.get(p['tenant'],'connectors',spec['id'])
+            current.update(last_sync=time.time(),last_result={k:v if isinstance(v,int) else len(v) for k,v in result.items()})
+            self.store.put(p['tenant'],'connectors',{k:v for k,v in current.items() if k not in ('id','created','updated','revision','tenant')},spec['id'])
+            self.store.audit(p['tenant'],p['username'],'connector.synced',spec['id'],counts)
+        return result
+
+    def schedule_connectors(self):
+        """Queue a sync for each connector whose interval has elapsed and has no sync already queued or running."""
+        now=time.time()
+        with self.store.lock:
+            rows=self.store.db.execute("SELECT tenant,id FROM objects WHERE kind='connectors'").fetchall()
+        for row in rows:
+            p={'tenant':row['tenant'],'username':'scheduler','role':'admin','groups':[]}
+            spec=self.store.get(row['tenant'],'connectors',row['id'])
+            if not spec.get('interval_minutes') or now-spec.get('last_sync',0)<spec['interval_minutes']*60:
+                continue
+            if any(j['type']=='sync' and j['target']==spec['id'] and j['status'] in ('queued','running') for j in self.store.list(row['tenant'],'jobs')):
+                continue
+            self.new_job(p,'sync',spec['id'],{'scheduled':int(now//60)})
+
     FIELD_TYPES=('string','number','integer','boolean','date')
     EXTRACT_PROMPT=('You extract structured fields from a document. Reply with one JSON object and nothing else: '
                     '{"fields": {"<name>": {"value": <value or null>, "confidence": <0-1>}}}. Use null with confidence 0 when a field is absent. '
@@ -1379,6 +1548,8 @@ class Platform:
                     result=self.run_experiment(p,job)
                 elif job['type']=='extract':
                     result=self.run_extraction(p,job)
+                elif job['type']=='sync':
+                    result=self.run_sync(p,job)
                 else:
                     results=[]
                     for request in job['input']['requests']:
@@ -1462,6 +1633,7 @@ class Platform:
     def worker(self):
         beat=0.0
         polled=0.0
+        scheduled=0.0
         while not self.stop.is_set():
             if time.monotonic()-beat>10:
                 beat=time.monotonic()
@@ -1473,6 +1645,12 @@ class Platform:
                 polled=time.monotonic()
                 try:
                     self.poll_external()
+                except Exception:
+                    traceback.print_exc()
+            if time.monotonic()-scheduled>60:
+                scheduled=time.monotonic()
+                try:
+                    self.schedule_connectors()
                 except Exception:
                     traceback.print_exc()
             for tenant,id,job in self.store.queued_jobs():

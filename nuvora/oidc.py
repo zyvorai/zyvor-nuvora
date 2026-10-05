@@ -264,6 +264,12 @@ class OIDC:
             raise Fault('Your identity provider groups grant no Nuvora role', 403)
         return tenant, username, role, self.config.issuer+'|'+str(claims.get('sub', raw))
 
+    def groups(self, claims):
+        """Raw group names from the roles claim, used for document access control."""
+        groups = claim(claims, self.config.roles_claim)
+        groups = [groups] if isinstance(groups, str) else groups if isinstance(groups, list) else []
+        return [g for g in groups if isinstance(g, str)]
+
 
 def verify_signature(alg, jwk, signed, sig):
     try:

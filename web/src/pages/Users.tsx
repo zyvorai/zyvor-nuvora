@@ -4,6 +4,7 @@ import { KeyRound, Trash2 } from 'lucide-react';
 import { api, type Row } from '../api';
 import { Badge, Card, Field, ListEmpty } from '../components/kit';
 import type { Act } from '../lib/types';
+import { splitGroups } from '../lib/meta';
 
 export default function Users({ principal, act, refresh }: { principal: Row; act: Act; refresh: number }) {
   const [users, setUsers] = useState<Row[]>([]);
@@ -39,7 +40,21 @@ export default function Users({ principal, act, refresh }: { principal: Row; act
                   {self && <span className="muted small"> · you</span>}
                 </b>
                 {lastAdmin && <small>Last administrator</small>}
-                {u.source === 'sso' && <small>SSO · role re-syncs from the identity provider at each sign-in</small>}
+                {u.source === 'sso' && <small>SSO · role and groups re-sync from the identity provider at each sign-in</small>}
+                {u.source === 'sso' ? (
+                  u.groups?.length > 0 && <small>Groups: {u.groups.join(', ')}</small>
+                ) : (
+                  <input
+                    className="inline-input"
+                    aria-label={'Groups for ' + u.username}
+                    placeholder="Groups for document access, comma-separated"
+                    defaultValue={(u.groups || []).join(', ')}
+                    onBlur={(e) => {
+                      const next = splitGroups(e.target.value);
+                      if (next.join(',') !== (u.groups || []).join(',')) act(() => api('/api/users/' + encodeURIComponent(u.username), { groups: next }), `Groups saved for ${u.username}`).then((r) => r && reload());
+                    }}
+                  />
+                )}
               </div>
               {self || lastAdmin ? (
                 <Badge value={u.role} />

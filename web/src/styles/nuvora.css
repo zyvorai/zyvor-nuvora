@@ -1179,6 +1179,10 @@ form.filters input { min-height: 36px; margin: 0; padding: 6px 10px; font-size: 
 .dropzone.over { border-color: var(--apple-blue); background: color-mix(in srgb, var(--apple-blue) 8%, transparent); }
 .dropzone.disabled { opacity: .6; }
 .upload-list { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 6px; }
+.access-fields { margin-top: 12px; }
+.access-fields summary { cursor: pointer; font-size: 13px; color: var(--muted, #6e6e73); }
+.access-fields .form-grid { margin-top: 8px; }
+.inline-input { margin-top: 4px; width: 100%; max-width: 320px; font-size: 12px; padding: 4px 8px; }
 .upload-list li { display: grid; grid-template-columns: 18px minmax(0, auto) minmax(0, 1fr); align-items: center; gap: 8px; font-size: 13px; }
 .upload-list li b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .upload-list li small { color: var(--text-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

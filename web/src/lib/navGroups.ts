@@ -5,6 +5,7 @@ export const pages = [
   'models',
   'routers',
   'knowledge',
+  'connectors',
   'agents',
   'actions',
   'mcp_servers',
@@ -54,13 +55,14 @@ export const navGroups: NavGroup[] = [
       { page: 'models', label: 'Models', blurb: 'OpenAI-compatible, Ollama and AWS endpoints, with operator pricing.' },
       { page: 'routers', label: 'Routers', blurb: 'Try a cheaper model first and escalate when the answer falls short.' },
       { page: 'knowledge', label: 'Knowledge', blurb: 'Index documents and inspect exactly what retrieval returns.' },
+      { page: 'connectors', label: 'Connectors', blurb: 'Keep knowledge in sync with a website, S3 prefix or Confluence space.' },
     ],
   },
   {
     label: 'Build',
     children: [
       { page: 'agents', label: 'Agents', blurb: 'Bounded model and tool loops with registered tool schemas.' },
-      { page: 'actions', label: 'Connectors & actions', blurb: 'Typed enterprise APIs; external writes wait for human approval.' },
+      { page: 'actions', label: 'API actions', blurb: 'Typed enterprise APIs; external writes wait for human approval.' },
       { page: 'mcp_servers', label: 'MCP servers', blurb: 'Remote tool servers for agents; writing tools wait for approval.' },
       { page: 'workflows', label: 'Workflows', blurb: 'Pinned DAGs with retrieval, generation and review steps.' },
       { page: 'prompts', label: 'Prompts', blurb: 'Versioned templates with variable validation.' },

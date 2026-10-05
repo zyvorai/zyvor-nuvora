@@ -136,7 +136,7 @@ class OIDCTest(LiveServer):
         session = self.session_cookie(cookies)
         _, _, _, body = self.get('/api/session', session)
         principal = json.loads(body)['principal']
-        self.assertEqual(principal, {'tenant': 'a', 'username': 'alice_example.com', 'role': 'developer'})
+        self.assertEqual(principal, {'tenant': 'a', 'username': 'alice_example.com', 'role': 'developer', 'groups': ['nuvora-devs']})
         users = {u['username']: u for u in self.json('/api/users')['users']}
         self.assertEqual(users['alice_example.com']['source'], 'sso')
         actions = [(e['actor'], e['action']) for e in self.json('/api/audit')['events']]
@@ -152,6 +152,8 @@ class OIDCTest(LiveServer):
         _, _, cookies, _ = self.sign_in()
         _, _, _, body = self.get('/api/session', self.session_cookie(cookies))
         self.assertEqual(json.loads(body)['principal']['role'], 'admin')
+        self.assertEqual(json.loads(body)['principal']['groups'], ['nuvora-devs', 'nuvora-admins'])
+        self.json('/api/users/alice_example.com', {'groups': ['other']}, expect=409)
         self.groups = []
         _, _, cookies, _ = self.sign_in()
         _, _, _, body = self.get('/api/session', self.session_cookie(cookies))

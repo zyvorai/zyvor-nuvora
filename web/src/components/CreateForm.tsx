@@ -9,6 +9,7 @@ import CaseEditor, { cleanCase, type EvalCase } from './CaseEditor';
 import PolicyFields from './PolicyFields';
 import VariantEditor from './VariantEditor';
 import { topoOrder, type Step } from '../lib/dag';
+import { formatMeta, parseMeta, splitGroups } from '../lib/meta';
 
 const KEYS: Record<string, string[]> = {
   actions: ['url', 'method', 'key_env', 'description'],
@@ -17,6 +18,7 @@ const KEYS: Record<string, string[]> = {
   knowledge: ['embedding_model', 'rerank_model', 'ocr_model', 'transcription_model'],
   agents: ['model', 'system_prompt', 'knowledge_ids', 'tools', 'max_steps', 'summarize_memory'],
   mcp_servers: ['url', 'key_env', 'readonly', 'tools'],
+  connectors: ['type', 'knowledge_id', 'url', 'depth', 'max_pages', 'bucket', 'prefix', 'region', 'space', 'username', 'key_env', 'metadata', 'groups', 'interval_minutes'],
   prompts: ['template', 'variants'],
   policies: ['redact_pii', 'detect_injection', 'max_chars', 'daily_tokens', 'blocked_topics', 'word_filters', 'regex_filters', 'pii_entities', 'grounding_threshold', 'classifier_model', 'classifier_categories', 'classifier_threshold', 'cache_ttl'],
   recipes: ['model', 'method', 'dataset', 'rank', 'epochs'],
@@ -30,10 +32,16 @@ export function toolLabel(name: string, info?: Row): string {
   return name.replaceAll('_', ' ');
 }
 
+export function connectorKeys(type: string | undefined): string[] {
+  if (type === 's3') return ['type', 'knowledge_id', 'bucket', 'prefix', 'region', 'max_pages'];
+  if (type === 'confluence') return ['type', 'knowledge_id', 'url', 'space', 'key_env', 'username', 'max_pages'];
+  return ['type', 'knowledge_id', 'url', 'depth', 'max_pages'];
+}
+
 export function createLabel(kind: string): string {
   if (kind === 'knowledge') return 'knowledge base';
   if (kind === 'policies') return 'policy';
-  if (kind === 'actions') return 'connector';
+  if (kind === 'actions') return 'action';
   if (kind === 'mcp_servers') return 'MCP server';
   return kind.slice(0, -1);
 }
@@ -61,7 +69,8 @@ export default function CreateForm({
     output_price: 0,
     model: firstModel,
     tools: ['knowledge_search'],
-    url: 'https://api.internal.example/status',
+    url: kind === 'connectors' ? '' : 'https://api.internal.example/status',
+    type: 'web',
     knowledge_ids: [],
     max_steps: 5,
     template: 'Answer {{question}} using {{evidence}}.',
@@ -93,6 +102,9 @@ export default function CreateForm({
     }
   })();
   const set = (k: string, v: unknown) => setData({ ...data, [k]: v });
+  const [metaText, setMetaText] = useState(formatMeta(existing?.metadata));
+  const [groupText, setGroupText] = useState((existing?.groups || []).join(', '));
+  const metaError = kind === 'connectors' ? parseMeta(metaText).error : undefined;
   const [tools, setTools] = useState<string[]>(['knowledge_search', 'list_models', 'memory_read', 'memory_search', 'memory_write']);
   const [toolInfo, setToolInfo] = useState<Record<string, Row>>({});
   const [presets, setPresets] = useState<Row[]>([]);
@@ -146,7 +158,15 @@ export default function CreateForm({
     setError('');
     try {
       const body: Row = { name: data.name };
-      for (const k of KEYS[kind] || []) if (data[k] !== undefined) body[k] = data[k];
+      for (const k of kind === 'connectors' ? connectorKeys(data.type) : KEYS[kind] || []) if (data[k] !== undefined && data[k] !== '') body[k] = data[k];
+      if (kind === 'connectors') {
+        body.type = data.type || 'web';
+        const { meta, error: bad } = parseMeta(metaText);
+        if (bad) throw new Error(bad);
+        body.metadata = meta;
+        body.groups = splitGroups(groupText);
+        body.interval_minutes = data.interval_minutes ? Number(data.interval_minutes) : null;
+      }
       if (existing) body.expected_revision = existing.revision;
       if (kind === 'actions') body.input_schema = JSON.parse(json);
       if (kind === 'workflows') {
@@ -312,6 +332,86 @@ export default function CreateForm({
           ) : (
             <p className="note">Saving connects to the server and lists its tools. Edit the server afterwards to choose which tools agents may call.</p>
           )}
+        </>
+      )}
+      {kind === 'connectors' && (
+        <>
+          <div className="form-grid">
+            <Field label="Source">
+              <select value={data.type || 'web'} onChange={(e) => setData({ ...data, type: e.target.value, url: e.target.value === 's3' ? undefined : '' })} disabled={!!existing}>
+                <option value="web">Website crawl</option>
+                <option value="s3">S3 prefix</option>
+                <option value="confluence">Confluence space</option>
+              </select>
+            </Field>
+            <Field label="Knowledge base">
+              <select value={data.knowledge_id || ''} onChange={(e) => set('knowledge_id', e.target.value)} required>
+                <option value="">Choose…</option>
+                {(collections.knowledge || []).map((k) => (
+                  <option key={k.id} value={k.id}>
+                    {k.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          {(data.type || 'web') === 'web' && (
+            <>
+              {field('url', 'Start URL · host must be in NUVORA_CONNECTOR_HOSTS')}
+              <div className="form-grid">
+                <Field label="Link depth (0–3)">
+                  <input type="number" min={0} max={3} value={data.depth ?? 1} onChange={(e) => set('depth', Number(e.target.value))} />
+                </Field>
+                <Field label="Page limit">
+                  <input type="number" min={1} max={200} value={data.max_pages ?? 25} onChange={(e) => set('max_pages', Number(e.target.value))} />
+                </Field>
+              </div>
+              <p className="note">Same host only; robots.txt and its crawl delay are honoured; redirects are not followed.</p>
+            </>
+          )}
+          {data.type === 's3' && (
+            <div className="form-grid">
+              {field('bucket', 'Bucket')}
+              <Field label="Prefix (optional)">
+                <input value={data.prefix || ''} onChange={(e) => set('prefix', e.target.value)} />
+              </Field>
+              <Field label="Region (optional)">
+                <input value={data.region || ''} onChange={(e) => set('region', e.target.value)} />
+              </Field>
+              <Field label="Object limit">
+                <input type="number" min={1} max={500} value={data.max_pages ?? 100} onChange={(e) => set('max_pages', Number(e.target.value))} />
+              </Field>
+            </div>
+          )}
+          {data.type === 'confluence' && (
+            <>
+              {field('url', 'Confluence base URL · host must be in NUVORA_CONNECTOR_HOSTS')}
+              <div className="form-grid">
+                {field('space', 'Space key')}
+                <Field label="Page limit">
+                  <input type="number" min={1} max={500} value={data.max_pages ?? 100} onChange={(e) => set('max_pages', Number(e.target.value))} />
+                </Field>
+                <Field label="Token environment reference">
+                  <input value={data.key_env || ''} placeholder="NUVORA_SECRET_CONFLUENCE" onChange={(e) => set('key_env', e.target.value)} required />
+                </Field>
+                <Field label="Account email (Cloud basic auth; empty for a bearer token)">
+                  <input value={data.username || ''} onChange={(e) => set('username', e.target.value)} />
+                </Field>
+              </div>
+            </>
+          )}
+          <div className="form-grid">
+            <Field label="Sync every (minutes, empty for manual)">
+              <input type="number" min={15} max={10080} value={data.interval_minutes ?? ''} onChange={(e) => set('interval_minutes', e.target.value === '' ? null : Number(e.target.value))} />
+            </Field>
+            <Field label="Visible to groups (comma-separated; empty for everyone)">
+              <input value={groupText} onChange={(e) => setGroupText(e.target.value)} />
+            </Field>
+          </div>
+          <Field label="Metadata added to every document · key=value per line">
+            <textarea rows={3} value={metaText} onChange={(e) => setMetaText(e.target.value)} aria-invalid={!!metaError} />
+          </Field>
+          {metaError && <p className="note danger-text">{metaError}</p>}
         </>
       )}
       {kind === 'routers' && (
