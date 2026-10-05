@@ -2,7 +2,7 @@
 
 The console follows the Zyvor Apple UX contract: [docs/design/APPLE-UX-CONTRACT.md](design/APPLE-UX-CONTRACT.md).
 
-Netra's design system was ported directly into Nuvora. That covers its tokens (`styles.css`), story primitives (`apple-story.css`), navigation with mega-panels, `PageHero`, theme handling, and the login layout. Zyvor AI Labs relicensed those files under Apache-2.0 for this repository; see [THIRD-PARTY.md](../THIRD-PARTY.md).
+Netra's design system was ported directly into Nuvora. That covers its tokens (`styles.css`), story primitives (`apple-story.css`), navigation with mega-panels, `PageHero`, theme handling, and the login layout. Both projects use the Zyvor Production License v1.0; see [THIRD-PARTY.md](../THIRD-PARTY.md).
 
 ## Console features
 

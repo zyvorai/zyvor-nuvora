@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **License:** Nuvora moves from Apache-2.0 to the Zyvor Production License v1.0 (`LicenseRef-Zyvor-Production-1.0`), matching Netra. Non-production use stays free; production use needs a commercial license. Adds `NOTICE` and `LICENSES/`.
+
 - **Console UX overhaul:**
   - a split-screen sign-in
   - a ⌘K command palette and keyboard shortcuts

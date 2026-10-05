@@ -104,10 +104,12 @@ function TrustBand() {
         <Reveal className={styles.trustGrid}>
           <div>
             <Heading as="h3" className={styles.sectionHeading}>
-              Open, and honest about its limits
+              Source-available, and honest about its limits
             </Heading>
             <p>
-              Apache-2.0. CI runs on every push: backend tests on Python
+              Zyvor Production License v1.0: free for evaluation, development
+              and other non-production use; production use needs a commercial
+              license. CI runs on every push: backend tests on Python
               3.11–3.13, console typecheck, tests and build, Helm lint and
               render, shellcheck, and a real-browser smoke test. 0.1.0 is an
               evaluation release, and the capability matrix says exactly what
@@ -121,8 +123,8 @@ function TrustBand() {
               alt="CI status"
             />
             <img
-              src="https://img.shields.io/badge/License-Apache--2.0-blue.svg"
-              alt="Apache-2.0"
+              src="https://img.shields.io/badge/License-Zyvor%20Production%20v1.0-orange.svg"
+              alt="Zyvor Production License v1.0"
             />
           </div>
         </Reveal>

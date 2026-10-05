@@ -10,6 +10,6 @@ Parts of the console were adapted from Zyvor Netra (https://github.com/zyvorai/z
 - the Zyvor logo marks (`web/public/zyvor-*.svg`)
 - the deploy guard library (`scripts/lib/deploy-guards.sh`)
 
-In Netra these files are licensed under LicenseRef-Zyvor-Production-1.0. Zyvor AI Labs, the copyright holder, relicenses these adapted copies under Apache-2.0 as part of Nuvora. The Zyvor name and logo remain trademarks of Zyvor AI Labs.
+Like Netra, Nuvora is licensed under the Zyvor Production License v1.0 (LicenseRef-Zyvor-Production-1.0), so these adapted copies keep their original license. The Zyvor name and logo remain trademarks of Zyvor AI Labs.
 
 No model weights are bundled. Model access and weight licenses remain the operator's responsibility.

@@ -3,7 +3,7 @@
 # Nuvora
 
 [![CI](https://github.com/zyvorai/zyvor-nuvora/actions/workflows/ci.yml/badge.svg)](https://github.com/zyvorai/zyvor-nuvora/actions/workflows/ci.yml)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+[![License: Zyvor Production v1.0](https://img.shields.io/badge/License-Zyvor%20Production%20v1.0-orange.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.1.0-informational)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/Python-3.11%2B%20stdlib-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![React](https://img.shields.io/badge/React-console-61DAFB?logo=react&logoColor=black)](web)
@@ -215,4 +215,9 @@ Fabric, Gryvia, Aurora, and Zyntra each have a specific job. Nuvora is the appli
 
 ## License
 
-Apache-2.0. Copyright 2026 Zyvor AI Labs and contributors. Third-party frontend dependencies retain their own licenses; see [THIRD-PARTY.md](THIRD-PARTY.md).
+Nuvora is source-available under the **[Zyvor Production License v1.0](LICENSE)** (SPDX `LicenseRef-Zyvor-Production-1.0`, also in [LICENSES/](LICENSES/LicenseRef-Zyvor-Production-1.0.txt)).
+
+- **Free** for evaluation, development, testing, research, education, non-production labs and all other non-production use.
+- **Production use** requires a separate paid commercial license from Zyvor AI Labs. Plans and terms: [Pricing](https://zyvor.dev/pricing?utm_source=github&utm_medium=nuvora&utm_campaign=readme_license) · [sales@zyvor.dev](mailto:sales@zyvor.dev).
+
+Third-party dependencies keep their own licenses; see [THIRD-PARTY.md](THIRD-PARTY.md).

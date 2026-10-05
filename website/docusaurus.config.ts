@@ -117,7 +117,7 @@ const config: Config = {
           ],
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} Zyvor AI Labs. Apache-2.0.`,
+      copyright: `Copyright © ${new Date().getFullYear()} Zyvor AI Labs. Zyvor Production License v1.0.`,
     },
     prism: {
       theme: prismThemes.github,
