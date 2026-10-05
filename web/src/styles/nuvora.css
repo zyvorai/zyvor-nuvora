@@ -1225,3 +1225,10 @@ form.filters input { min-height: 36px; margin: 0; padding: 6px 10px; font-size: 
 .guard-verdict { display: grid; gap: 6px; margin-top: 12px; }
 .guard-verdict ul { margin: 0; padding-left: 18px; }
 .variant-list { margin: 8px 0 12px; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; }
+.waterfall { display: grid; gap: 6px; margin: 12px 0 16px; }
+.waterfall__row { display: grid; grid-template-columns: minmax(90px, 160px) 1fr 64px; gap: 10px; align-items: center; font-size: 12px; }
+.waterfall__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.waterfall__track { position: relative; height: 10px; background: var(--line, #e3e6ea); border-radius: 5px; }
+.waterfall__bar { position: absolute; top: 0; bottom: 0; border-radius: 5px; background: var(--apple-blue, #0071e3); }
+.waterfall__bar.purple { background: var(--apple-purple, #8e44ad); }
+.waterfall__ms { text-align: right; color: var(--muted, #6e6e73); font-variant-numeric: tabular-nums; }

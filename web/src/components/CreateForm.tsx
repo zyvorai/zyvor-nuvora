@@ -15,7 +15,8 @@ const KEYS: Record<string, string[]> = {
   models: ['provider', 'base_url', 'upstream_model', 'key_env', 'region', 'input_price', 'output_price', 'cached_input_price', 'capability', 'enabled'],
   routers: ['models', 'judge_model', 'min_score'],
   knowledge: ['embedding_model', 'rerank_model'],
-  agents: ['model', 'system_prompt', 'knowledge_ids', 'tools', 'max_steps'],
+  agents: ['model', 'system_prompt', 'knowledge_ids', 'tools', 'max_steps', 'summarize_memory'],
+  mcp_servers: ['url', 'key_env', 'readonly', 'tools'],
   prompts: ['template', 'variants'],
   policies: ['redact_pii', 'detect_injection', 'max_chars', 'daily_tokens', 'blocked_topics', 'word_filters', 'regex_filters', 'pii_entities', 'grounding_threshold', 'classifier_model', 'classifier_categories', 'classifier_threshold', 'cache_ttl'],
   recipes: ['model', 'method', 'dataset', 'rank', 'epochs'],
@@ -23,10 +24,17 @@ const KEYS: Record<string, string[]> = {
   workflows: [],
 };
 
+export function toolLabel(name: string, info?: Row): string {
+  const description: string = info?.description || '';
+  if (name.startsWith('mcp_') && description.startsWith('[MCP ')) return `${description.slice(5, description.indexOf(']')).split(' · ')[0]} · ${name.split('_').slice(2).join('_')}`;
+  return name.replaceAll('_', ' ');
+}
+
 export function createLabel(kind: string): string {
   if (kind === 'knowledge') return 'knowledge base';
   if (kind === 'policies') return 'policy';
   if (kind === 'actions') return 'connector';
+  if (kind === 'mcp_servers') return 'MCP server';
   return kind.slice(0, -1);
 }
 
@@ -85,14 +93,18 @@ export default function CreateForm({
     }
   })();
   const set = (k: string, v: unknown) => setData({ ...data, [k]: v });
-  const [tools, setTools] = useState<string[]>(['knowledge_search', 'list_models', 'memory_read', 'memory_write']);
+  const [tools, setTools] = useState<string[]>(['knowledge_search', 'list_models', 'memory_read', 'memory_search', 'memory_write']);
+  const [toolInfo, setToolInfo] = useState<Record<string, Row>>({});
   const [presets, setPresets] = useState<Row[]>([]);
   const [found, setFound] = useState<Row[] | null>(null);
   const [discovering, setDiscovering] = useState(false);
   useEffect(() => {
     if (kind === 'agents')
       api('/api/tools')
-        .then((r) => setTools(Object.keys(r.tools)))
+        .then((r) => {
+          setTools(Object.keys(r.tools));
+          setToolInfo(r.tools);
+        })
         .catch(() => undefined);
     if (kind === 'models' && !existing)
       api('/api/models/presets')
@@ -266,6 +278,35 @@ export default function CreateForm({
           </label>
         </>
       )}
+      {kind === 'mcp_servers' && (
+        <>
+          {field('url', 'MCP endpoint (Streamable HTTP) · host must be allowed by the operator')}
+          {field('key_env', 'Secret environment reference (optional)')}
+          <label className="check">
+            <input type="checkbox" checked={!!data.readonly} onChange={(e) => set('readonly', e.target.checked)} />
+            Read-only server: run its tools without approval
+          </label>
+          {existing?.available?.length ? (
+            <fieldset className="policy-group">
+              <legend>Tools agents may use</legend>
+              <div className="check-list">
+                {existing.available.map((t: string) => (
+                  <label key={t}>
+                    <input
+                      type="checkbox"
+                      checked={(data.tools || []).includes(t)}
+                      onChange={(e) => set('tools', e.target.checked ? [...(data.tools || []), t] : (data.tools || []).filter((x: string) => x !== t))}
+                    />
+                    {t}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          ) : (
+            <p className="note">Saving connects to the server and lists its tools. Edit the server afterwards to choose which tools agents may call.</p>
+          )}
+        </>
+      )}
       {kind === 'routers' && (
         <>
           <fieldset className="policy-group">
@@ -381,11 +422,15 @@ export default function CreateForm({
                   checked={data.tools.includes(t)}
                   onChange={(e) => set('tools', e.target.checked ? [...data.tools, t] : data.tools.filter((x: string) => x !== t))}
                 />
-                {t.replaceAll('_', ' ')}
+                {toolLabel(t, toolInfo[t])}
               </label>
             ))}
           </div>
           {field('max_steps', 'Maximum model steps', 'number')}
+          <label className="check">
+            <input type="checkbox" checked={!!data.summarize_memory} onChange={(e) => set('summarize_memory', e.target.checked)} />
+            Summarize each run into long-term memory (a different person approves each summary)
+          </label>
         </>
       )}
       {kind === 'prompts' && (

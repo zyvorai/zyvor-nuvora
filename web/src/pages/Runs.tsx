@@ -10,6 +10,31 @@ import type { Act } from '../lib/types';
 
 type Entry = { key: string; icon: typeof Activity; tone: string; title: string; detail?: string; status: string };
 
+export function Waterfall({ run }: { run: Row }) {
+  const timed: Row[] = (run.trace || []).filter((t: Row) => typeof t.start === 'number');
+  if (!timed.length) return null;
+  const origin = Math.min(run.started || timed[0].start, ...timed.map((t) => t.start));
+  const finish = Math.max(run.finished || 0, ...timed.map((t) => t.end || t.start));
+  const span = Math.max(finish - origin, 0.001);
+  return (
+    <div className="waterfall" role="list" aria-label="Step timing">
+      {timed.map((t, i) => {
+        const left = ((t.start - origin) / span) * 100;
+        const width = Math.max((((t.end || t.start) - t.start) / span) * 100, 0.8);
+        return (
+          <div className="waterfall__row" role="listitem" key={i}>
+            <span className="waterfall__label">{t.tool || t.model || t.step}</span>
+            <span className="waterfall__track">
+              <span className={'waterfall__bar ' + (t.type === 'tool' ? 'purple' : 'blue')} style={{ left: left + '%', width: width + '%' }} />
+            </span>
+            <span className="waterfall__ms">{Math.round(((t.end || t.start) - t.start) * 1000)} ms</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function timeline(run: Row): Entry[] {
   if (run.type === 'workflow') {
     const status = stepStatuses(run);
@@ -133,6 +158,8 @@ function Inspector({ run, approvals, principal, canApprove, act }: { run: Row; a
           </table>
         </div>
       )}
+
+      <Waterfall run={run} />
 
       {entries.length > 0 && run.type !== 'evaluation' && run.type !== 'experiment' && (
         <ol className="timeline" aria-label="Run steps">

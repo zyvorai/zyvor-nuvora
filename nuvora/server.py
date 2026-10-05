@@ -282,7 +282,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.sse(app.open_stream(p,body))
                 return
             if path=='/api/tools':
-                self.respond(200,{'tools':app.tools()})
+                self.respond(200,{'tools':app.tools(p)})
                 return
             if path=='/api/integrations':
                 require(p,'admin')
@@ -367,6 +367,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path=='/api/retrieve' and method=='POST':
                 self.respond(200,{'citations':app.retrieve(p,body.get('knowledge_ids',[]),body.get('query',''),body.get('top_k',5))})
+                return
+            if path=='/api/actions/import-openapi' and method=='POST':
+                self.respond(201,app.import_openapi(p,body))
                 return
             if path=='/api/guardrails/check' and method=='POST':
                 require(p,'developer','admin')

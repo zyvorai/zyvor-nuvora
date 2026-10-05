@@ -82,6 +82,9 @@ class LiveServer(unittest.TestCase):
                 data=payload if isinstance(payload,bytes) else json.dumps(payload).encode()
                 self.send_response(status)
                 self.send_header('Content-Type',(headers or {}).get('Content-Type','application/json'))
+                for key,value in (headers or {}).items():
+                    if key!='Content-Type':
+                        self.send_header(key,value)
                 self.send_header('Content-Length',str(len(data)))
                 self.end_headers()
                 self.wfile.write(data)

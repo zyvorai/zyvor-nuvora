@@ -6,6 +6,7 @@ import { layout, topoOrder } from './dag';
 import { scale } from '../components/charts';
 import { notifications, passwordStrength } from './notifications';
 import { caseKinds, cleanCase } from '../components/CaseEditor';
+import { toolLabel } from '../components/CreateForm';
 import { ssoError } from '../components/Login';
 
 describe('fuzzy', () => {
@@ -113,5 +114,12 @@ describe('sso error', () => {
   it('reads the callback error from the query string', () => {
     expect(ssoError('?sso_error=Token%20has%20expired')).toBe('Token has expired');
     expect(ssoError('')).toBe('');
+  });
+});
+
+describe('toolLabel', () => {
+  it('names MCP tools by server and tool', () => {
+    expect(toolLabel('mcp_ab12cd34_create_ticket', { description: '[MCP Tickets · approval required] Open a ticket' })).toBe('Tickets · create_ticket');
+    expect(toolLabel('memory_search')).toBe('memory search');
   });
 });
