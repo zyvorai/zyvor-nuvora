@@ -7,6 +7,7 @@ import { Field } from './kit';
 import { WorkflowBuilder } from './WorkflowCanvas';
 import CaseEditor, { cleanCase, type EvalCase } from './CaseEditor';
 import PolicyFields from './PolicyFields';
+import VariantEditor from './VariantEditor';
 import { topoOrder, type Step } from '../lib/dag';
 
 const KEYS: Record<string, string[]> = {
@@ -15,7 +16,7 @@ const KEYS: Record<string, string[]> = {
   routers: ['models', 'judge_model', 'min_score'],
   knowledge: ['embedding_model', 'rerank_model'],
   agents: ['model', 'system_prompt', 'knowledge_ids', 'tools', 'max_steps'],
-  prompts: ['template'],
+  prompts: ['template', 'variants'],
   policies: ['redact_pii', 'detect_injection', 'max_chars', 'daily_tokens', 'blocked_topics', 'word_filters', 'regex_filters', 'pii_entities', 'grounding_threshold', 'classifier_model', 'classifier_categories', 'classifier_threshold', 'cache_ttl'],
   recipes: ['model', 'method', 'dataset', 'rank', 'epochs'],
   evaluations: ['model', 'pass_threshold', 'judge_model', 'knowledge_ids'],
@@ -388,9 +389,12 @@ export default function CreateForm({
         </>
       )}
       {kind === 'prompts' && (
-        <Field label="Prompt template · {{variable}} syntax">
-          <textarea rows={7} value={data.template} onChange={(e) => set('template', e.target.value)} required />
-        </Field>
+        <>
+          <Field label="Prompt template · {{variable}} syntax">
+            <textarea rows={7} value={data.template} onChange={(e) => set('template', e.target.value)} required />
+          </Field>
+          <VariantEditor variants={data.variants || []} onChange={(v) => set('variants', v)} />
+        </>
       )}
       {kind === 'policies' && (
         <>

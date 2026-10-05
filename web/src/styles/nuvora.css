@@ -1224,3 +1224,4 @@ form.filters input { min-height: 36px; margin: 0; padding: 6px 10px; font-size: 
 .filter-row { display: grid; grid-template-columns: 1fr 2fr auto auto; gap: 8px; align-items: center; }
 .guard-verdict { display: grid; gap: 6px; margin-top: 12px; }
 .guard-verdict ul { margin: 0; padding-left: 18px; }
+.variant-list { margin: 8px 0 12px; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; }

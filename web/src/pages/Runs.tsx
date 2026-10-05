@@ -107,7 +107,34 @@ function Inspector({ run, approvals, principal, canApprove, act }: { run: Row; a
 
       {run.type === 'evaluation' && run.result?.cases?.length > 0 && <CaseResults cases={run.result.cases} />}
 
-      {entries.length > 0 && run.type !== 'evaluation' && (
+      {run.type === 'experiment' && run.result?.arms && (
+        <div className="table-wrap">
+          <table aria-label="Experiment results">
+            <thead>
+              <tr>
+                <th>Variant</th>
+                <th>Traffic</th>
+                <th>Score</th>
+                <th>Verdict</th>
+              </tr>
+            </thead>
+            <tbody>
+              {run.result.arms.map((a: Row) => (
+                <tr key={a.variant}>
+                  <td>
+                    {a.variant} {run.result.winner === a.variant && <span className="type-badge">winner</span>}
+                  </td>
+                  <td>{a.weight}%</td>
+                  <td>{Math.round((a.score || 0) * 100)}%</td>
+                  <td>{a.release_allowed ? 'Release allowed' : 'Release blocked'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {entries.length > 0 && run.type !== 'evaluation' && run.type !== 'experiment' && (
         <ol className="timeline" aria-label="Run steps">
           {entries.map((e) => (
             <li key={e.key}>

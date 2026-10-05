@@ -404,7 +404,12 @@ class Handler(BaseHTTPRequestHandler):
                     if kind=='approvals' and action=='decide':
                         self.respond(200,app.decide(p,id,body['decision'],body['digest'])); return
                     if kind=='prompts' and action=='render':
-                        self.respond(200,app.render_prompt(p,id,body.get('variables',{}))); return
+                        subject=body.get('subject')
+                        if subject is not None and (not isinstance(subject,str) or len(subject)>200):
+                            raise Fault('subject must be a string of at most 200 characters')
+                        self.respond(200,app.render_prompt(p,id,body.get('variables',{}),body.get('variant'),subject)); return
+                    if kind=='prompts' and action=='experiment':
+                        self.respond(202,app.new_job(p,'experiment',id,body,self.headers.get('Idempotency-Key'))); return
                     if kind=='recipes' and action=='export':
                         recipe=app.get(p,kind,id)
                         self.respond(200,{'apiVersion':'nuvora.zyvor.dev/v1alpha1','kind':'TrainingRecipe','metadata':{'name':recipe['name']},'spec':recipe,'execution':'External trainer required; recipe export does not train a model'}); return

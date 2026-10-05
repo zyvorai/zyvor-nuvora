@@ -278,7 +278,7 @@ function Console() {
     agents: <Agents rows={rows} canWrite={canWrite} act={act} />,
     actions: <Actions rows={rows} />,
     workflows: <Workflows rows={rows} />,
-    prompts: <Prompts rows={rows} canWrite={canWrite} act={act} selected={prompt} onSelect={setPrompt} onEdit={() => prompt && setEditor({ kind: 'prompts', existing: prompt })} />,
+    prompts: <Prompts rows={rows} canWrite={canWrite} act={act} selected={prompt} onSelect={setPrompt} onEdit={() => prompt && setEditor({ kind: 'prompts', existing: prompt })} evaluations={collections.evaluations || []} onQueued={() => navigate('jobs')} />,
     recipes: <Recipes rows={rows} act={act} />,
     jobs: (
       <Runs
