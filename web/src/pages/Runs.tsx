@@ -159,9 +159,35 @@ function Inspector({ run, approvals, principal, canApprove, act }: { run: Row; a
         </div>
       )}
 
+      {run.type === 'extract' && run.result?.fields && (
+        <div className="table-wrap">
+          <table aria-label="Extracted fields">
+            <thead>
+              <tr>
+                <th>Field</th>
+                <th>Value</th>
+                <th>Confidence</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(run.result.fields as Record<string, Row>).map(([name, f]) => (
+                <tr key={name}>
+                  <td>{name}</td>
+                  <td>{f.value === null ? <span className="muted">not found</span> : String(f.value)}</td>
+                  <td>
+                    {Math.round((f.confidence || 0) * 100)}% {run.result.low_confidence?.includes(name) && <span className="type-badge">review</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {run.result.reviewed && <p className="note">Reviewed by {run.result.reviewer}.</p>}
+        </div>
+      )}
+
       <Waterfall run={run} />
 
-      {entries.length > 0 && run.type !== 'evaluation' && run.type !== 'experiment' && (
+      {entries.length > 0 && !['evaluation', 'experiment', 'extract'].includes(run.type) && (
         <ol className="timeline" aria-label="Run steps">
           {entries.map((e) => (
             <li key={e.key}>

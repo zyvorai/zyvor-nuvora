@@ -1,7 +1,10 @@
 # SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 """Operator-configured providers; no unrestricted URL tools."""
+import base64
 import json
 import os
+import re
+import secrets
 import time
 import urllib.error
 import urllib.request
@@ -48,6 +51,61 @@ def stream_lines(url, body, headers, allowlist):
         raise Fault('Provider request failed; check operator configuration',502) from exc
 
 
+DATA_IMAGE=re.compile(r'data:(image/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=\s]+)$')
+
+
+def text_of(content):
+    """The text of a message content (a string, or OpenAI-style content parts)."""
+    if isinstance(content,str):
+        return content
+    return '\n'.join(part.get('text','') for part in content or [] if isinstance(part,dict) and part.get('type')=='text')
+
+
+def images_of(content):
+    """[(mime, base64)] for the data-URL image parts of a message content."""
+    if isinstance(content,str):
+        return []
+    out=[]
+    for part in content or []:
+        if isinstance(part,dict) and part.get('type')=='image_url':
+            match=DATA_IMAGE.match((part.get('image_url') or {}).get('url',''))
+            if match:
+                out.append((match[1],match[2]))
+    return out
+
+
+def ollama_messages(messages):
+    out=[]
+    for m in messages:
+        images=images_of(m.get('content'))
+        out.append({'role':m['role'],'content':text_of(m.get('content')),**({'images':[b for _,b in images]} if images else {})})
+    return out
+
+
+def aws_messages(messages):
+    system=[{'text':text_of(m['content'])} for m in messages if m['role']=='system']
+    history=[]
+    for m in messages:
+        if m['role'] not in ('user','assistant'):
+            continue
+        blocks=[{'text':text_of(m['content'])}]+[{'image':{'format':mime.split('/')[1],'source':{'bytes':base64.b64decode(b)}}} for mime,b in images_of(m['content'])]
+        history.append({'role':m['role'],'content':blocks})
+    return system,history
+
+
+def multipart(fields,files):
+    """(body, content_type) for multipart/form-data; files are (field, filename, mime, bytes)."""
+    boundary='nuvora'+secrets.token_hex(12)
+    parts=[]
+    for key,value in fields.items():
+        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{key}"\r\n\r\n{value}\r\n'.encode())
+    for key,filename,mime,data in files:
+        safe=re.sub(r'[^\w.-]','_',filename)[:120] or 'upload'
+        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{key}"; filename="{safe}"\r\nContent-Type: {mime}\r\n\r\n'.encode()+data+b'\r\n')
+    parts.append(f'--{boundary}--\r\n'.encode())
+    return b''.join(parts),'multipart/form-data; boundary='+boundary
+
+
 class Providers:
     def __init__(self, allowed_hosts=None):
         self.allowed_hosts=set(allowed_hosts if allowed_hosts is not None else os.getenv('NUVORA_PROVIDER_HOSTS','localhost,127.0.0.1').split(','))
@@ -67,7 +125,7 @@ class Providers:
         kind=model['provider']
         if kind=='demo':
             last=messages[-1]
-            text=last.get('content','')
+            text=text_of(last.get('content',''))+(' [image attached]' if images_of(last.get('content')) else '')
             if tools and not any(m.get('role')=='tool' for m in messages):
                 name=tools[0]['function']['name']
                 args={'query':text} if name=='knowledge_search' else {}
@@ -77,8 +135,7 @@ class Providers:
             if tools:
                 raise Fault('AWS tool calling is not supported in this release; use an OpenAI-compatible agent model',422)
             client=self._aws_client(model)
-            system=[{'text':m['content']} for m in messages if m['role']=='system']
-            history=[{'role':m['role'],'content':[{'text':m['content']}]} for m in messages if m['role'] in ('user','assistant')]
+            system,history=aws_messages(messages)
             try:
                 raw=client.converse(modelId=model['upstream_model'],messages=history,system=system,inferenceConfig={'maxTokens':max_tokens,'temperature':temperature})
             except Exception as exc:
@@ -95,7 +152,7 @@ class Providers:
         if kind=='ollama':
             if tools:
                 raise Fault('Use Ollama’s OpenAI-compatible /v1 endpoint for agent tool calling',422)
-            raw=post_json(url+'/api/chat',{'model':model['upstream_model'],'messages':messages,'stream':False,'options':{'num_predict':max_tokens,'temperature':temperature}},headers,self.allowed_hosts)
+            raw=post_json(url+'/api/chat',{'model':model['upstream_model'],'messages':ollama_messages(messages),'stream':False,'options':{'num_predict':max_tokens,'temperature':temperature}},headers,self.allowed_hosts)
             return {'content':raw['message']['content'],'tool_calls':[],'usage':{'prompt_tokens':raw.get('prompt_eval_count',0),'completion_tokens':raw.get('eval_count',0)},'evidence_class':'provider'}
         body={'model':model['upstream_model'],'messages':messages,'max_tokens':max_tokens,'temperature':temperature,'stream':False}
         if tools:
@@ -134,7 +191,7 @@ class Providers:
         headers=self._auth(model)
         usage={}
         if kind=='ollama':
-            body={'model':model['upstream_model'],'messages':messages,'stream':True,'options':{'num_predict':max_tokens,'temperature':temperature}}
+            body={'model':model['upstream_model'],'messages':ollama_messages(messages),'stream':True,'options':{'num_predict':max_tokens,'temperature':temperature}}
             for line in stream_lines(url+'/api/chat',body,headers,self.allowed_hosts):
                 try:
                     chunk=json.loads(line)
@@ -175,8 +232,7 @@ class Providers:
 
     def _aws_stream(self,model,messages,max_tokens,temperature):
         client=self._aws_client(model)
-        system=[{'text':m['content']} for m in messages if m['role']=='system']
-        history=[{'role':m['role'],'content':[{'text':m['content']}]} for m in messages if m['role'] in ('user','assistant')]
+        system,history=aws_messages(messages)
         try:
             raw=client.converse_stream(modelId=model['upstream_model'],messages=history,system=system,inferenceConfig={'maxTokens':max_tokens,'temperature':temperature})
         except Exception as exc:
@@ -198,6 +254,26 @@ class Providers:
         except Exception as exc:
             raise Fault('AWS model stream failed',502) from exc
         yield {'usage':usage,'evidence_class':'provider'}
+
+    def transcribe(self,model,filename,data,mime):
+        """Speech to text through an OpenAI-compatible /audio/transcriptions endpoint."""
+        self.validate(model)
+        if model['provider']!='openai':
+            raise Fault('Transcription models use the OpenAI-compatible provider (for example a Whisper server)',422)
+        url=model['base_url'].rstrip('/')+'/audio/transcriptions'
+        validate_url(url,self.allowed_hosts)
+        body,ctype=multipart({'model':model['upstream_model'],'response_format':'json'},[('file',filename,mime,data)])
+        request=urllib.request.Request(url,body,{'Content-Type':ctype,**self._auth(model)},method='POST')
+        try:
+            with urllib.request.build_opener(NoRedirect).open(request,timeout=300) as response:
+                raw=json.loads(response.read(8*1024*1024))
+        except Fault:
+            raise
+        except (urllib.error.URLError,ValueError,TimeoutError) as exc:
+            raise Fault('Transcription request failed; check operator configuration',502) from exc
+        if not isinstance(raw,dict) or not isinstance(raw.get('text'),str):
+            raise Fault('Transcription provider returned no text',502)
+        return raw['text']
 
     def embed(self,model,texts):
         if model['provider'] not in ('openai','ollama'):

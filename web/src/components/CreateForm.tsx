@@ -12,9 +12,9 @@ import { topoOrder, type Step } from '../lib/dag';
 
 const KEYS: Record<string, string[]> = {
   actions: ['url', 'method', 'key_env', 'description'],
-  models: ['provider', 'base_url', 'upstream_model', 'key_env', 'region', 'input_price', 'output_price', 'cached_input_price', 'capability', 'enabled'],
+  models: ['provider', 'base_url', 'upstream_model', 'key_env', 'region', 'input_price', 'output_price', 'cached_input_price', 'capability', 'enabled', 'vision'],
   routers: ['models', 'judge_model', 'min_score'],
-  knowledge: ['embedding_model', 'rerank_model'],
+  knowledge: ['embedding_model', 'rerank_model', 'ocr_model', 'transcription_model'],
   agents: ['model', 'system_prompt', 'knowledge_ids', 'tools', 'max_steps', 'summarize_memory'],
   mcp_servers: ['url', 'key_env', 'readonly', 'tools'],
   prompts: ['template', 'variants'],
@@ -228,6 +228,7 @@ export default function CreateForm({
               <select value={data.capability} onChange={(e) => set('capability', e.target.value)}>
                 <option>chat</option>
                 <option>embedding</option>
+                <option>transcription</option>
               </select>
             </Field>
           </div>
@@ -276,6 +277,12 @@ export default function CreateForm({
             <input type="checkbox" checked={!!data.enabled} onChange={(e) => set('enabled', e.target.checked)} />
             Enabled for routing
           </label>
+          {data.capability === 'chat' && (
+            <label className="check">
+              <input type="checkbox" checked={!!data.vision} onChange={(e) => set('vision', e.target.checked)} />
+              Accepts images (vision)
+            </label>
+          )}
         </>
       )}
       {kind === 'mcp_servers' && (
@@ -371,6 +378,34 @@ export default function CreateForm({
             ))}
           </select>
         </Field>
+      )}
+      {kind === 'knowledge' && (
+        <div className="form-grid">
+          <Field label="OCR for images and scanned PDFs">
+            <select value={data.ocr_model || ''} onChange={(e) => set('ocr_model', e.target.value)}>
+              <option value="">Local Tesseract (ocr extra)</option>
+              {chatModels
+                .filter((m) => m.vision || m.provider === 'demo')
+                .map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+            </select>
+          </Field>
+          <Field label="Audio transcription">
+            <select value={data.transcription_model || ''} onChange={(e) => set('transcription_model', e.target.value)}>
+              <option value="">None · audio uploads refused</option>
+              {(collections.models || [])
+                .filter((m) => m.capability === 'transcription')
+                .map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+            </select>
+          </Field>
+        </div>
       )}
       {['agents', 'recipes', 'evaluations'].includes(kind) && modelSelect}
       {kind === 'evaluations' && (

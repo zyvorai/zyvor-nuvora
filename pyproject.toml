@@ -16,7 +16,8 @@ aws = ["boto3>=1.35,<2"]
 pdf = ["pypdf>=5,<6"]
 sso = ["cryptography>=43"]
 postgres = ["psycopg[binary]>=3.2,<4"]
-all = ["zyvor-nuvora[aws,pdf,sso,postgres]"]
+ocr = ["pytesseract>=0.3.10", "pillow>=10"]
+all = ["zyvor-nuvora[aws,pdf,sso,postgres,ocr]"]
 
 [project.scripts]
 nuvora = "nuvora.server:main"

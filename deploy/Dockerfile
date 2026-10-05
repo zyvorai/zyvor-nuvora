@@ -10,8 +10,9 @@ WORKDIR /app
 COPY pyproject.toml README.md LICENSE NOTICE ./
 COPY nuvora/ ./nuvora/
 COPY --from=console /src/nuvora/static ./nuvora/static/
-# Optional extras (PDF parsing, SSO JWT verification, Postgres, AWS) ship in the image.
-RUN pip install --no-cache-dir '.[all]' && rm -rf /app/*
+# Optional extras (PDF parsing, SSO JWT verification, Postgres, AWS, OCR) ship in the image.
+RUN apt-get update && apt-get install -y --no-install-recommends tesseract-ocr && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir '.[all]' && rm -rf /app/*
 RUN groupadd --gid 10001 nuvora && useradd --uid 10001 --gid 10001 --no-create-home nuvora && mkdir /data && chown nuvora:nuvora /data
 USER 10001:10001
 EXPOSE 8789

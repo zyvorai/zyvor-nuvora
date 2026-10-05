@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
-"""Extract plain text from uploaded files. Standard library, except PDF (nuvora[pdf])."""
+"""Extract plain text from uploaded files. Standard library, except PDF (nuvora[pdf]) and local OCR (nuvora[ocr])."""
 import csv
 import io
 import json
@@ -15,6 +15,8 @@ TYPES={
     '.txt':'text/plain','.md':'text/markdown','.markdown':'text/markdown','.json':'application/json',
     '.csv':'text/csv','.html':'text/html','.htm':'text/html','.pdf':'application/pdf',
     '.docx':'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp',
+    '.mp3':'audio/mpeg','.wav':'audio/wav','.m4a':'audio/mp4','.ogg':'audio/ogg','.webm':'audio/webm','.flac':'audio/flac',
 }
 W='{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
 
@@ -26,7 +28,56 @@ def kind(filename,content_type=''):
     base=(content_type or '').split(';')[0].strip().lower()
     if base in TYPES.values():
         return base
-    raise Fault('Unsupported file type; use .txt, .md, .json, .csv, .html, .docx or .pdf',415)
+    raise Fault('Unsupported file type; use text, Markdown, JSON, CSV, HTML, DOCX, PDF, PNG/JPEG/WebP images or MP3/WAV/M4A/OGG/WebM/FLAC audio',415)
+
+
+def media(detected):
+    """'image', 'audio' or None for a detected content type."""
+    return detected.split('/')[0] if detected.startswith(('image/','audio/')) else None
+
+
+MAGIC={'image/png':(b'\x89PNG',),'image/jpeg':(b'\xff\xd8\xff',),'image/webp':(b'RIFF',)}
+
+
+def check_image(data,detected):
+    if not any(data.startswith(m) for m in MAGIC.get(detected,(b'',))):
+        raise Fault('The file content does not match its image type',422)
+    return data
+
+
+def pdf_images(data,limit=50):
+    """[(bytes, mime)] for the page images of a scanned PDF (one or more per page)."""
+    try:
+        from pypdf import PdfReader
+    except ImportError as exc:
+        raise Fault('PDF parsing needs the optional extra: pip install "zyvor-nuvora[pdf]"',503) from exc
+    out=[]
+    try:
+        for page in PdfReader(io.BytesIO(data)).pages[:limit]:
+            for image in page.images:
+                raw=image.data
+                mime='image/png' if raw.startswith(b'\x89PNG') else 'image/jpeg' if raw.startswith(b'\xff\xd8') else None
+                if mime:
+                    out.append((raw,mime))
+    except Exception as exc:
+        raise Fault('Could not read images from this PDF',422) from exc
+    return out
+
+
+def ocr_local(images):
+    """Tesseract OCR (nuvora[ocr] plus the tesseract binary)."""
+    try:
+        import pytesseract
+        from PIL import Image
+    except ImportError as exc:
+        raise Fault('OCR needs a vision model on this knowledge base or the optional extra: pip install "zyvor-nuvora[ocr]"',503) from exc
+    pages=[]
+    try:
+        for raw,_ in images:
+            pages.append(pytesseract.image_to_string(Image.open(io.BytesIO(raw))))
+    except pytesseract.TesseractNotFoundError as exc:
+        raise Fault('OCR needs the tesseract binary on the server',503) from exc
+    return '\n\n'.join(pages)
 
 
 def decode(data):

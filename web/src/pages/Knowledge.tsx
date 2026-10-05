@@ -5,8 +5,9 @@ import { ago, api, type Row } from '../api';
 import { Card, Field, ListEmpty } from '../components/kit';
 import type { Act } from '../lib/types';
 import { usePageActions } from '../lib/pageContext';
+import { ExtractCard } from '../components/ExtractCard';
 
-const ACCEPT = '.txt,.md,.markdown,.json,.csv,.html,.htm,.docx,.pdf';
+const ACCEPT = '.txt,.md,.markdown,.json,.csv,.html,.htm,.docx,.pdf,.png,.jpg,.jpeg,.webp,.mp3,.wav,.m4a,.ogg,.webm,.flac';
 const MAX_BYTES = 20 * 1024 * 1024;
 
 type Item = { key: string; name: string; state: 'queued' | 'uploading' | 'done' | 'error'; note?: string };
@@ -19,6 +20,8 @@ export function fileType(contentType: string | undefined): string {
   if (t === 'text/markdown') return 'MD';
   if (t === 'text/csv') return 'CSV';
   if (t === 'application/json') return 'JSON';
+  if (t.startsWith('image/')) return 'IMAGE';
+  if (t.startsWith('audio/')) return 'AUDIO';
   return 'TEXT';
 }
 
@@ -36,7 +39,7 @@ async function base64(file: File): Promise<string> {
   return btoa(binary);
 }
 
-export default function Knowledge({ rows, canWrite, act, refresh }: { rows: Row[]; canWrite: boolean; act: Act; refresh: number }) {
+export default function Knowledge({ rows, models, canWrite, act, refresh }: { rows: Row[]; models: Row[]; canWrite: boolean; act: Act; refresh: number }) {
   const [selected, setSelected] = useState('');
   const [docs, setDocs] = useState<Row[]>([]);
   const [items, setItems] = useState<Item[]>([]);
@@ -153,7 +156,7 @@ export default function Knowledge({ rows, canWrite, act, refresh }: { rows: Row[
         >
           <Upload size={26} />
           <b>Drop files to index them</b>
-          <small>PDF, Word (.docx), HTML, Markdown, CSV, JSON or text · up to 20 MB each</small>
+          <small>PDF, Word (.docx), HTML, Markdown, CSV, JSON, text, images (OCR) or audio (transcription) · up to 20 MB each</small>
           <div className="actions">
             <button type="button" className="primary" disabled={!canWrite} onClick={() => input.current?.click()}>
               Choose files
@@ -213,7 +216,7 @@ export default function Knowledge({ rows, canWrite, act, refresh }: { rows: Row[
                   <div>
                     <b>{d.name}</b>
                     <small>
-                      <span className="type-badge">{fileType(d.content_type)}</span> {bytes(d.bytes)} · {d.chunks} chunks · {ago(d.updated)} · <code>{String(d.digest).slice(0, 10)}</code>
+                      <span className="type-badge">{fileType(d.content_type)}</span> {d.extraction && d.extraction !== 'text' && <span className="type-badge">{d.extraction}</span>} {bytes(d.bytes)} · {d.chunks} chunks · {ago(d.updated)} · <code>{String(d.digest).slice(0, 10)}</code>
                     </small>
                   </div>
                   {canWrite &&
@@ -258,6 +261,8 @@ export default function Knowledge({ rows, canWrite, act, refresh }: { rows: Row[
           ))}
         </Card>
       </div>
+
+      <ExtractCard docs={docs} models={models} canWrite={canWrite} act={act} />
     </div>
   );
 }

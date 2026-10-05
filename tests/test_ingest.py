@@ -113,7 +113,7 @@ class UploadAPITests(LiveServer):
         self.assertEqual(self.request(f'/api/knowledge/{kb}/upload',{'name':'a.txt','content_base64':'@@@'})[0],400)
         self.assertEqual(self.upload(kb,'a.txt',b'hello',self.viewer)[0],403)
         import http.client
-        for path,size,status in (('/api/chat',1024*1024+1,413),(f'/api/knowledge/{kb}/upload',1024*1024+1,'not 413'),(f'/api/knowledge/{kb}/upload',28*1024*1024+1,413)):
+        for path,size,status in (('/api/retrieve',1024*1024+1,413),('/api/chat',28*1024*1024+1,413),(f'/api/knowledge/{kb}/upload',1024*1024+1,'not 413'),(f'/api/knowledge/{kb}/upload',28*1024*1024+1,413)):
             conn=http.client.HTTPConnection('127.0.0.1',self.server.server_port,timeout=5)
             conn.putrequest('POST',path)
             for k,v in (('Authorization','Bearer '+self.token),('Content-Type','application/json'),('Content-Length',str(size))):

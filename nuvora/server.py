@@ -209,7 +209,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if method!='GET':
                 self.check_origin()
-            upload=method=='POST' and path.startswith('/api/knowledge/') and path.endswith('/upload')
+            upload=method=='POST' and (path.startswith('/api/knowledge/') and path.endswith('/upload') or path in ('/api/chat','/api/chat/stream','/v1/chat/completions','/api/extract'))
             body=self.body(UPLOAD_BODY if upload else 1024*1024) if method=='POST' else {}
             if path=='/api/auth/providers':
                 provider=app.auth.oidc
@@ -272,12 +272,14 @@ class Handler(BaseHTTPRequestHandler):
                                   'transport':'direct TLS' if getattr(self.server,'direct_tls',False) else ('TLS proxy' if self.server.secure else 'loopback HTTP'),
                                   'demo_models':demo,'worker':'running' if getattr(app,'worker_thread',None) and app.worker_thread.is_alive() else 'stopped',
                                   'policy':app.policy(p),'budget':app.usage_series(p,1)['budget'],
-                                  'limits':{'chat_timeout_seconds':45,'body_bytes':1024*1024,'upload_bytes':20*1024*1024,'max_messages':100,'max_output_tokens':8192,'concurrent_calls_per_user':4}})
+                                  'limits':{'chat_timeout_seconds':45,'body_bytes':1024*1024,'media_body_bytes':UPLOAD_BODY,'upload_bytes':20*1024*1024,'images_per_request':4,'max_messages':100,'max_output_tokens':8192,'concurrent_calls_per_user':4}})
                 return
             if path=='/api/password' and method=='POST':
                 app.auth.change_password(p,body.get('current',''),body.get('new',''),token)
                 self.respond(200,{'ok':True})
                 return
+            if path=='/api/extract' and method=='POST':
+                self.respond(202,app.new_job(p,'extract',None,body,self.headers.get('Idempotency-Key'))); return
             if path=='/api/chat/stream' and method=='POST':
                 self.sse(app.open_stream(p,body))
                 return

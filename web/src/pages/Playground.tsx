@@ -1,19 +1,34 @@
 // SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
-import { BookOpen, Columns2, Copy, MessageSquarePlus, RotateCcw, Settings2, Sparkles, Square, Trash2 } from 'lucide-react';
+import { BookOpen, Columns2, Copy, ImagePlus, MessageSquarePlus, RotateCcw, Settings2, Sparkles, Square, Trash2, X } from 'lucide-react';
 import { ago, api, money, stream, type Row } from '../api';
 import { Badge, Card, Field, ListEmpty } from '../components/kit';
 import { useToast } from '../components/Toasts';
 import type { Act } from '../lib/types';
 
 type Answer = { model: string; content: string; meta?: Row; error?: string; streaming?: boolean; stopped?: boolean };
-type Turn = { role: 'user'; content: string; citations?: Row[] } | { role: 'assistant'; answers: Answer[] };
+type Turn = { role: 'user'; content: string; citations?: Row[]; images?: number } | { role: 'assistant'; answers: Answer[] };
 type Conversation = { id: string; title: string; model: string; compare: string; kb: string; turns: Turn[]; updated: number };
 type Settings = { temperature: number; max_tokens: number; system: string; stream: boolean; cache: boolean };
 
 const DEFAULTS: Settings = { temperature: 0, max_tokens: 1024, system: '', stream: true, cache: true };
 const STARTER = 'How does Keep protect an agent?';
 const HISTORY = 20;
+const MAX_IMAGES = 4;
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+export function userContent(text: string, images: string[]): string | Row[] {
+  return images.length ? [{ type: 'text', text }, ...images.map((url) => ({ type: 'image_url', image_url: { url } }))] : text;
+}
+
+function dataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
 
 const fresh = (model = 'auto', kb = ''): Conversation => ({
   id: Math.random().toString(36).slice(2, 10),
@@ -74,6 +89,8 @@ export default function Playground({
   const threadEnd = useRef<HTMLDivElement>(null);
   const active = chats.find((c) => c.id === activeId) || chats[0];
   const [retrieving, setRetrieving] = useState(false);
+  const [images, setImages] = useState<{ name: string; url: string }[]>([]);
+  const imageInput = useRef<HTMLInputElement>(null);
   const busy = retrieving || active.turns.some((t) => t.role === 'assistant' && t.answers.some((a) => a.streaming));
   const chatModels = useMemo(() => models.filter((m) => m.capability === 'chat'), [models]);
   const modelName = (id: string) => (id === 'auto' ? 'Auto' : id.startsWith('router:') ? 'Router · ' + (routers.find((r) => 'router:' + r.id === id)?.name || id) : chatModels.find((m) => m.id === id)?.name || id);
@@ -141,7 +158,18 @@ export default function Playground({
     return out.slice(-HISTORY);
   }
 
-  async function generate(conv: Conversation, question: string, prior: Turn[]) {
+  async function attach(files: File[]) {
+    const room = MAX_IMAGES - images.length;
+    const picked = files.filter((f) => ['image/png', 'image/jpeg', 'image/webp'].includes(f.type));
+    if (picked.length < files.length) toast('Attach PNG, JPEG or WebP images', 'error');
+    if (picked.length > room) toast(`At most ${MAX_IMAGES} images per message`, 'error');
+    const sized = picked.slice(0, Math.max(0, room)).filter((f) => f.size <= MAX_IMAGE_BYTES);
+    if (sized.length < Math.min(picked.length, room)) toast('Images are limited to 5 MB each', 'error');
+    const added = await Promise.all(sized.map(async (f) => ({ name: f.name, url: await dataUrl(f) })));
+    setImages((prev) => [...prev, ...added]);
+  }
+
+  async function generate(conv: Conversation, question: string, prior: Turn[], attached: string[] = []) {
     let citations: Row[] = [];
     if (conv.kb) {
       setRetrieving(true);
@@ -156,14 +184,14 @@ export default function Playground({
     const evidence = citations.length
       ? '\nEvidence:\n' + citations.map((c, i) => `[${i + 1}] ${c.document} (chunk ${c.index}): ${c.text}`).join('\n')
       : '';
-    const messages = [{ role: 'system', content: system }, ...history(prior), { role: 'user', content: question + evidence }];
+    const messages = [{ role: 'system', content: system }, ...history(prior), { role: 'user', content: userContent(question + evidence, attached) }];
     const targets = [conv.model, ...(conv.compare ? [conv.compare] : [])];
     const turnIndex = prior.length + 1;
     update(conv.id, (c) => ({
       ...c,
       title: c.turns.length ? c.title : question.slice(0, 60),
       updated: Date.now() / 1000,
-      turns: [...prior, { role: 'user', content: question, citations }, { role: 'assistant', answers: targets.map((model) => ({ model, content: '', streaming: true })) }],
+      turns: [...prior, { role: 'user', content: question, citations, ...(attached.length ? { images: attached.length } : {}) }, { role: 'assistant', answers: targets.map((model) => ({ model, content: '', streaming: true })) }],
     }));
     setFocusCitation(null);
     const sources = citations.slice(0, 20).map((c) => String(c.text));
@@ -205,7 +233,9 @@ export default function Playground({
     const question = message.trim();
     if (!question || busy || !canWrite) return;
     setMessage('');
-    await generate(active, question, active.turns);
+    const attached = images.map((x) => x.url);
+    setImages([]);
+    await generate(active, question, active.turns, attached);
   }
 
   function regenerate() {
@@ -347,6 +377,7 @@ export default function Playground({
             t.role === 'user' ? (
               <div key={i} className="bubble user">
                 <p>{t.content}</p>
+                {!!t.images && <small className="muted">{t.images} image(s) attached · not kept in history</small>}
                 {!!t.citations?.length && (
                   <div className="cite-row" aria-label="Sources">
                     {t.citations.map((c, n) => (
@@ -457,7 +488,35 @@ export default function Playground({
           <Field label="Your question">
             <textarea rows={3} value={message} onChange={(e) => setMessage(e.target.value)} onKeyDown={onKey} required />
           </Field>
+          {images.length > 0 && (
+            <div className="cite-row" aria-label="Attached images">
+              {images.map((x, n) => (
+                <span key={n} className="cite-chip">
+                  {x.name}
+                  <button type="button" className="icon" aria-label={'Remove ' + x.name} onClick={() => setImages((prev) => prev.filter((_, j) => j !== n))}>
+                    <X size={12} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <input
+            ref={imageInput}
+            type="file"
+            hidden
+            multiple
+            accept="image/png,image/jpeg,image/webp"
+            aria-label="Attach images"
+            onChange={(e) => {
+              attach(Array.from(e.target.files || []));
+              e.target.value = '';
+            }}
+          />
           <div className="composer__actions">
+            <button type="button" className="btn-secondary compact" onClick={() => imageInput.current?.click()} disabled={!canWrite || images.length >= MAX_IMAGES}>
+              <ImagePlus size={14} />
+              Attach image
+            </button>
             <span className="small muted">⌘↵ to send{active.turns.length ? ` · ${Math.min(HISTORY, history(active.turns).length)} prior messages in context` : ''}</span>
             {busy ? (
               <button type="button" className="btn-secondary" onClick={stop}>

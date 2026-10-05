@@ -275,7 +275,7 @@ function Console() {
     playground: <Playground models={collections.models || []} routers={collections.routers || []} knowledge={collections.knowledge || []} canWrite={canWrite} act={act} principal={principal} seed={askSeed} />,
     models: <Models rows={rows} />,
     routers: <Routers rows={rows} models={collections.models || []} />,
-    knowledge: <Knowledge rows={rows} canWrite={canWrite} act={act} refresh={refresh} />,
+    knowledge: <Knowledge rows={rows} models={collections.models || []} canWrite={canWrite} act={act} refresh={refresh} />,
     agents: <Agents rows={rows} canWrite={canWrite} act={act} />,
     actions: <Actions rows={rows} act={act} isAdmin={principal.role === 'admin'} />,
     mcp_servers: <McpServers rows={rows} />,
