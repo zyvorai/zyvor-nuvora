@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
 import type { Row } from '../api';
 import { layout, STEP_TYPES, topoOrder, type Step } from '../lib/dag';
+import { IMAGE_SIZES } from './ImageStudio';
 import type { Collections } from '../lib/types';
 import { Field } from './kit';
 
@@ -24,6 +25,7 @@ const TONE: Record<string, string> = {
   action: 'purple',
   approval: 'red',
   handoff: 'cyan',
+  generate_image: 'purple',
 };
 
 const STATUS_LABEL: Record<StepStatus, string> = {
@@ -149,6 +151,11 @@ function blank(type: string, collections: Collections, existing: Step[]): Step {
   const step: Step = { id: `${type}_${n}`, type, depends_on: [last || 'input'] };
   if (type === 'generate') step.model = (collections.models || []).find((m) => m.capability === 'chat')?.id || '';
   if (type === 'retrieve') step.knowledge_id = collections.knowledge?.[0]?.id || '';
+  if (type === 'generate_image') {
+    step.model = (collections.models || []).find((m) => m.capability === 'image')?.id || '';
+    step.prompt = `{{${last || 'input'}}}`;
+    step.size = '1024x1024';
+  }
   if (type === 'template') step.template = '{{input}}';
   if (type === 'condition') step.contains = '';
   if (type === 'extract') step.fields = ['summary'];
@@ -298,6 +305,31 @@ export function WorkflowBuilder({ steps, onChange, collections }: { steps: Step[
               </Field>
               <Field label="Instruction (optional)">
                 <textarea rows={2} value={String(step.instruction || '')} onChange={(e) => update({ instruction: e.target.value || undefined })} />
+              </Field>
+            </>
+          )}
+          {step.type === 'generate_image' && (
+            <>
+              <Field label="Image model">
+                <select value={String(step.model || '')} onChange={(e) => update({ model: e.target.value })}>
+                  {(collections.models || [])
+                    .filter((m) => m.capability === 'image')
+                    .map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                </select>
+              </Field>
+              <Field label="Prompt template · {{step}} inserts an earlier output">
+                <textarea rows={2} value={String(step.prompt || '')} onChange={(e) => update({ prompt: e.target.value })} />
+              </Field>
+              <Field label="Size">
+                <select value={String(step.size || '1024x1024')} onChange={(e) => update({ size: e.target.value })}>
+                  {IMAGE_SIZES.map((s) => (
+                    <option key={s}>{s}</option>
+                  ))}
+                </select>
               </Field>
             </>
           )}

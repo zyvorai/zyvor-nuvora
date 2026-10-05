@@ -136,7 +136,7 @@ class Platform:
             raise Fault('Invalid object')
         data={k:v for k,v in data.items() if k not in ('id','created','updated','revision','tenant')}
         fields={
-            'models':{'provider','upstream_model','base_url','key_env','region','capability','input_price','output_price','cached_input_price','enabled','vision'},
+            'models':{'provider','upstream_model','base_url','key_env','region','capability','input_price','output_price','cached_input_price','image_price','enabled','vision'},
             'knowledge':{'embedding_model','retrieval','rerank_model','ocr_model','transcription_model'},
             'agents':{'model','knowledge_ids','tools','max_steps','system_prompt','summarize_memory'},
             'mcp_servers':{'url','key_env','readonly','tools','catalog','available'},
@@ -159,8 +159,15 @@ class Platform:
             if not isinstance(data.get('upstream_model'),str):
                 raise Fault('upstream_model is required')
             data['capability']=data.get('capability','chat')
-            if data['capability'] not in ('chat','embedding','transcription'):
+            if data['capability'] not in ('chat','embedding','transcription','image'):
                 raise Fault('Invalid model capability')
+            if data['capability']=='image':
+                price=data.get('image_price',0)
+                if not isinstance(price,(int,float)) or not math.isfinite(price) or price<0:
+                    raise Fault('image_price must be a non-negative finite number per image')
+                data['image_price']=price
+            else:
+                data.pop('image_price',None)
             data['vision']=bool(data.get('vision',False)) and data['capability']=='chat'
             if 'cached_input_price' in data and data['cached_input_price'] is None:
                 del data['cached_input_price']
@@ -252,7 +259,7 @@ class Platform:
             for step in steps:
                 if not isinstance(step,dict) or not re.fullmatch(r'[a-z][a-z0-9_]{0,31}',step.get('id','')) or step['id'] in seen:
                     raise Fault('Step ids must be unique')
-                if step.get('type') not in ('retrieve','generate','template','condition','approval','extract','action','handoff'):
+                if step.get('type') not in ('retrieve','generate','template','condition','approval','extract','action','handoff','generate_image'):
                     raise Fault('Unknown step type')
                 for dep in step.get('depends_on',[]):
                     if dep not in seen:
@@ -261,6 +268,11 @@ class Platform:
                     self.get(p,'models',step['model'])
                 if step['type']=='retrieve':
                     self.get(p,'knowledge',step['knowledge_id'])
+                if step['type']=='generate_image':
+                    if self.get(p,'models',step.get('model','')).get('capability')!='image':
+                        raise Fault('An image step needs an image model')
+                    if not isinstance(step.get('prompt','{{input}}'),str) or len(step.get('prompt',''))>4000 or step.get('size','1024x1024') not in self.IMAGE_SIZES:
+                        raise Fault('An image step needs a prompt template up to 4000 characters and a supported size')
                 if step['type']=='handoff':
                     if not self.integrations.configured('zyntra'):
                         raise Fault('Handoff steps need Zyntra; the operator sets NUVORA_ZYNTRA_URL',409)
@@ -1317,6 +1329,9 @@ class Platform:
                 outputs[step['id']]=response['content']
             elif step['type']=='template':
                 outputs[step['id']]=render(step.get('template','{{input}}'),outputs)
+            elif step['type']=='generate_image':
+                made=self.generate_image(p,{'model':step['model'],'prompt':render(step.get('prompt','{{input}}'),outputs)[:4000],'size':step.get('size','1024x1024'),'n':1},'workflow:'+job['id'])
+                outputs[step['id']]={'images':[i['url'] for i in made['images']],'cost':made['cost']}
             elif step['type']=='condition':
                 outputs[step['id']]=step.get('contains','').lower() in context.lower()
             elif step['type']=='extract':
@@ -1539,6 +1554,72 @@ class Platform:
             if any(j['type']=='sync' and j['target']==spec['id'] and j['status'] in ('queued','running') for j in self.store.list(row['tenant'],'jobs')):
                 continue
             self.new_job(p,'sync',spec['id'],{'scheduled':int(now//60)})
+
+    IMAGE_SIZES=('256x256','512x512','1024x1024','1024x1792','1792x1024')
+    ARTIFACT_LIMIT=12*1024*1024
+
+    def image_model(self,p,requested):
+        if requested in (None,'','auto'):
+            models=sorted((m for m in self.list(p,'models') if m.get('enabled') and m.get('capability')=='image'),key=lambda m:(m['provider']=='demo',m.get('image_price',0)))
+            if not models:
+                raise Fault('No enabled image models',503)
+            return models[0]
+        model=self.get(p,'models',requested)
+        if not model.get('enabled') or model.get('capability')!='image':
+            raise Fault('Model is disabled or not an image model',409)
+        return model
+
+    def generate_image(self,p,body,source='api'):
+        require(p,'developer','admin')
+        prompt,n,size=body.get('prompt'),body.get('n',1),body.get('size','1024x1024')
+        if not isinstance(prompt,str) or not 1<=len(prompt.strip())<=4000:
+            raise Fault('A prompt of 1–4000 characters is required')
+        if not isinstance(n,int) or not 1<=n<=4 or size not in self.IMAGE_SIZES:
+            raise Fault('n must be 1–4 and size one of '+', '.join(self.IMAGE_SIZES))
+        model=self.image_model(p,body.get('model'))
+        policy=self.policy(p)
+        verdict=self.check(p,prompt,policy)
+        if not verdict['allowed']:
+            self.store.audit(p['tenant'],p['username'],'guardrail.blocked','image',{'reasons':verdict['reasons']})
+            raise Fault('Prompt refused by guardrail',422)
+        with self.store.lock:
+            used=self.store.db.execute('SELECT COALESCE(SUM(input_tokens+output_tokens),0) FROM usage WHERE tenant=? AND created>?',(p['tenant'],time.time()-86400)).fetchone()[0]
+        if used>=policy.get('daily_tokens',1000000):
+            raise Fault('Tenant daily token budget exhausted',429)
+        start=time.monotonic()
+        images=self.providers.image(model,verdict['text'],n,size)
+        latency=(time.monotonic()-start)*1000
+        ttl=max(1,min(365,int(os.getenv('NUVORA_ARTIFACT_TTL_DAYS','7') or 7)))*86400
+        cost=n*model.get('image_price',0)
+        now=time.time()
+        out=[]
+        import base64
+        with self.store.transaction():
+            for data,mime in images:
+                if len(data)>self.ARTIFACT_LIMIT:
+                    raise Fault('Generated image exceeds 12 MiB',502)
+                aid=secrets.token_hex(12)
+                self.store.db.execute('INSERT INTO artifacts (tenant,id,mime,size,data,owner,source,created,expires) VALUES (?,?,?,?,?,?,?,?,?)',
+                                      (p['tenant'],aid,mime,len(data),base64.b64encode(data).decode(),p['username'],source,now,now+ttl))
+                out.append({'id':aid,'url':'/api/artifacts/'+aid,'mime':mime,'bytes':len(data),'expires':now+ttl})
+            self.store.db.execute('INSERT INTO usage (id,tenant,model,input_tokens,output_tokens,cost,latency_ms,cached,created) VALUES (?,?,?,?,?,?,?,?,?)',
+                                  (secrets.token_hex(12),p['tenant'],model['id'],len(verdict['text'])//4,0,cost,latency,0,now))
+            self.store.audit(p['tenant'],p['username'],'image.generated',model['id'],{'artifacts':[i['id'] for i in out],'size':size,
+                             'prompt_digest':hashlib.sha256(verdict['text'].encode()).hexdigest(),'source':source})
+        return {'model':model['id'],'images':out,'cost':cost,'size':size,'latency_ms':round(latency,1),
+                'evidence_class':'synthetic' if model['provider']=='demo' else 'provider','pii_redacted':verdict.get('pii_redacted',False)}
+
+    def artifact(self,p,id):
+        import base64
+        with self.store.lock:
+            row=self.store.db.execute('SELECT mime,data,owner,expires FROM artifacts WHERE tenant=? AND id=?',(p['tenant'],str(id)[:64])).fetchone()
+        if not row or row['expires']<time.time() or (row['owner']!=p['username'] and p['role']!='admin'):
+            raise KeyError(id)
+        return row['mime'],base64.b64decode(row['data'])
+
+    def purge_artifacts(self):
+        with self.store.transaction():
+            return self.store.db.execute('DELETE FROM artifacts WHERE expires<?',(time.time(),)).rowcount
 
     FIELD_TYPES=('string','number','integer','boolean','date')
     EXTRACT_PROMPT=('You extract structured fields from a document. Reply with one JSON object and nothing else: '
@@ -1813,6 +1894,7 @@ class Platform:
                 scheduled=time.monotonic()
                 try:
                     self.schedule_connectors()
+                    self.purge_artifacts()
                 except Exception:
                     traceback.print_exc()
             for tenant,id,job in self.store.queued_jobs():

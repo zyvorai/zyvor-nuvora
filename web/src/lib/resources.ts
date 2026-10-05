@@ -3,7 +3,7 @@ import type { Row } from '../api';
 
 // Writable fields per collection; mirrors Platform.validate so duplicates pass validation.
 export const FIELDS: Record<string, string[]> = {
-  models: ['provider', 'upstream_model', 'base_url', 'key_env', 'region', 'capability', 'input_price', 'output_price', 'cached_input_price', 'enabled', 'vision'],
+  models: ['provider', 'upstream_model', 'base_url', 'key_env', 'region', 'capability', 'input_price', 'output_price', 'cached_input_price', 'image_price', 'enabled', 'vision'],
   routers: ['models', 'strategy', 'judge_model', 'min_score'],
   knowledge: ['embedding_model', 'rerank_model', 'ocr_model', 'transcription_model'],
   agents: ['model', 'knowledge_ids', 'tools', 'max_steps', 'system_prompt', 'summarize_memory'],

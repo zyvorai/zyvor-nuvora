@@ -13,7 +13,7 @@ import { formatMeta, parseMeta, splitGroups } from '../lib/meta';
 
 const KEYS: Record<string, string[]> = {
   actions: ['url', 'method', 'key_env', 'description'],
-  models: ['provider', 'base_url', 'upstream_model', 'key_env', 'region', 'input_price', 'output_price', 'cached_input_price', 'capability', 'enabled', 'vision'],
+  models: ['provider', 'base_url', 'upstream_model', 'key_env', 'region', 'input_price', 'output_price', 'cached_input_price', 'image_price', 'capability', 'enabled', 'vision'],
   routers: ['models', 'judge_model', 'min_score'],
   knowledge: ['embedding_model', 'rerank_model', 'ocr_model', 'transcription_model'],
   agents: ['model', 'system_prompt', 'knowledge_ids', 'tools', 'max_steps', 'summarize_memory'],
@@ -249,6 +249,7 @@ export default function CreateForm({
                 <option>chat</option>
                 <option>embedding</option>
                 <option>transcription</option>
+                <option>image</option>
               </select>
             </Field>
           </div>
@@ -293,6 +294,7 @@ export default function CreateForm({
               />
             </Field>
           </div>
+          {data.capability === 'image' && field('image_price', 'USD per generated image', 'number')}
           <label className="check">
             <input type="checkbox" checked={!!data.enabled} onChange={(e) => set('enabled', e.target.checked)} />
             Enabled for routing

@@ -15,13 +15,13 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         raise Fault('Provider redirects are disabled',502)
 
 
-def post_json(url, body, headers, allowlist):
+def post_json(url, body, headers, allowlist, timeout=45, limit=8*1024*1024):
     validate_url(url,allowlist)
     request=urllib.request.Request(url,json.dumps(body).encode(),{'Content-Type':'application/json',**headers},method='POST')
     try:
-        with urllib.request.build_opener(NoRedirect).open(request,timeout=45) as response:
-            raw=response.read(8*1024*1024+1)
-            if len(raw)>8*1024*1024:
+        with urllib.request.build_opener(NoRedirect).open(request,timeout=timeout) as response:
+            raw=response.read(limit+1)
+            if len(raw)>limit:
                 raise Fault('Provider response too large',502)
             return json.loads(raw)
     except Fault:
@@ -104,6 +104,17 @@ def multipart(fields,files):
         parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{key}"; filename="{safe}"\r\nContent-Type: {mime}\r\n\r\n'.encode()+data+b'\r\n')
     parts.append(f'--{boundary}--\r\n'.encode())
     return b''.join(parts),'multipart/form-data; boundary='+boundary
+
+
+def demo_png(prompt,index=0,width=256,height=256):
+    """A deterministic two-tone PNG so the demo provider can exercise the image path offline."""
+    import hashlib,struct,zlib
+    seed=hashlib.sha256(f'{index}:{prompt}'.encode()).digest()
+    top,bottom=seed[:3],seed[3:6]
+    rows=b''.join(b'\x00'+(top if y<height//2 else bottom)*width for y in range(height))
+    def chunk(kind,data):
+        return struct.pack('>I',len(data))+kind+data+struct.pack('>I',zlib.crc32(kind+data)&0xffffffff)
+    return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',width,height,8,2,0,0,0))+chunk(b'IDAT',zlib.compress(rows,9))+chunk(b'IEND',b'')
 
 
 class Providers:
@@ -254,6 +265,29 @@ class Providers:
         except Exception as exc:
             raise Fault('AWS model stream failed',502) from exc
         yield {'usage':usage,'evidence_class':'provider'}
+
+    def image(self,model,prompt,n,size):
+        """[(bytes, mime)] from an OpenAI-compatible /images/generations endpoint, or a synthetic demo PNG."""
+        self.validate(model)
+        if model['provider']=='demo':
+            return [(demo_png(prompt,i),'image/png') for i in range(n)]
+        if model['provider']!='openai':
+            raise Fault('Image generation uses the OpenAI-compatible provider',422)
+        raw=post_json(model['base_url'].rstrip('/')+'/images/generations',{'model':model['upstream_model'],'prompt':prompt,'n':n,'size':size,'response_format':'b64_json'},
+                      self._auth(model),self.allowed_hosts,180,48*1024*1024)
+        out=[]
+        for item in (raw.get('data') if isinstance(raw,dict) else None) or []:
+            try:
+                data=base64.b64decode(item['b64_json'],validate=True)
+            except (KeyError,TypeError,ValueError) as exc:
+                raise Fault('Image provider must return b64_json images',502) from exc
+            mime='image/png' if data.startswith(b'\x89PNG') else 'image/jpeg' if data.startswith(b'\xff\xd8') else 'image/webp' if data[8:12]==b'WEBP' else None
+            if not mime:
+                raise Fault('Image provider returned an unsupported image format',502)
+            out.append((data,mime))
+        if not out:
+            raise Fault('Image provider returned no images',502)
+        return out[:n]
 
     def transcribe(self,model,filename,data,mime):
         """Speech to text through an OpenAI-compatible /audio/transcriptions endpoint."""

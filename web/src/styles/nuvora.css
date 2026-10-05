@@ -1236,3 +1236,6 @@ form.filters input { min-height: 36px; margin: 0; padding: 6px 10px; font-size: 
 .waterfall__bar { position: absolute; top: 0; bottom: 0; border-radius: 5px; background: var(--apple-blue, #0071e3); }
 .waterfall__bar.purple { background: var(--apple-purple, #8e44ad); }
 .waterfall__ms { text-align: right; color: var(--muted, #6e6e73); font-variant-numeric: tabular-nums; }
+
+.image-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-top: 12px; }
+.image-grid img { width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--line, #e3e6ea); display: block; }

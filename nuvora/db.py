@@ -8,7 +8,7 @@ import sqlite3
 import threading
 import zlib
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 TABLES = '''
 CREATE TABLE IF NOT EXISTS objects (
@@ -41,6 +41,10 @@ CREATE TABLE IF NOT EXISTS login_failures (
   tenant TEXT NOT NULL, username TEXT NOT NULL, at REAL NOT NULL);
 CREATE INDEX IF NOT EXISTS login_failures_key ON login_failures (tenant,username,at);
 CREATE TABLE IF NOT EXISTS workers (id TEXT PRIMARY KEY, seen REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS artifacts (
+  tenant TEXT NOT NULL, id TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL,
+  data TEXT NOT NULL, owner TEXT NOT NULL, source TEXT NOT NULL DEFAULT '',
+  created REAL NOT NULL, expires REAL NOT NULL, PRIMARY KEY(tenant,id));
 CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);
 '''
 

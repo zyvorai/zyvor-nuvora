@@ -24,6 +24,7 @@ TABLES = {
     'audit': ('seq', 'tenant', 'event', 'previous', 'digest'),
     'usage': ('id', 'tenant', 'model', 'input_tokens', 'output_tokens', 'cost', 'latency_ms', 'cached', 'created', 'cached_tokens', 'saved'),
     'idempotency': ('tenant', 'key', 'fingerprint', 'value'),
+    'artifacts': ('tenant', 'id', 'mime', 'size', 'data', 'owner', 'source', 'created', 'expires'),
 }
 
 

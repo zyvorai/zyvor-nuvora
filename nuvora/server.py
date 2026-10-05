@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 """Same-origin HTTP API and built console. Standard library runtime."""
 import argparse
+import base64
 import hashlib
 import json
 import mimetypes
@@ -278,6 +279,16 @@ class Handler(BaseHTTPRequestHandler):
                 app.auth.change_password(p,body.get('current',''),body.get('new',''),token)
                 self.respond(200,{'ok':True})
                 return
+            if path=='/api/images' and method=='POST':
+                self.respond(200,app.generate_image(p,body)); return
+            if path=='/v1/images/generations' and method=='POST':
+                result=app.generate_image(p,{k:body.get(k) for k in ('model','prompt','n','size') if body.get(k) is not None})
+                fmt=body.get('response_format','b64_json')
+                data=[{'url':i['url']} if fmt=='url' else {'b64_json':base64.b64encode(app.artifact(p,i['id'])[1]).decode()} for i in result['images']]
+                self.respond(200,{'created':int(time.time()),'data':data,'nuvora':{'model':result['model'],'cost':result['cost'],'artifacts':[i['id'] for i in result['images']]}}); return
+            if path.startswith('/api/artifacts/') and method=='GET':
+                mime,data=app.artifact(p,path.rsplit('/',1)[1])
+                self.respond(200,data,{'Content-Type':mime,'Cache-Control':'private, max-age=3600','Content-Disposition':'inline'}); return
             if path=='/api/datasets' and method=='POST':
                 result=app.create_dataset(p,body)
                 self.respond(200 if body.get('dry_run') else 201,result); return

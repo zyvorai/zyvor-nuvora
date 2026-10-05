@@ -5,6 +5,7 @@ import { ago, api, money, stream, type Row } from '../api';
 import { Badge, Card, Field, ListEmpty } from '../components/kit';
 import { useToast } from '../components/Toasts';
 import type { Act } from '../lib/types';
+import { ImageStudio } from '../components/ImageStudio';
 
 type Answer = { model: string; content: string; meta?: Row; error?: string; streaming?: boolean; stopped?: boolean };
 type Turn = { role: 'user'; content: string; citations?: Row[]; images?: number } | { role: 'assistant'; answers: Answer[] };
@@ -58,15 +59,7 @@ function loadChats(key: string): Conversation[] {
   }
 }
 
-export default function Playground({
-  models,
-  routers = [],
-  knowledge,
-  canWrite,
-  act,
-  principal,
-  seed,
-}: {
+type PlaygroundProps = {
   models: Row[];
   routers?: Row[];
   knowledge: Row[];
@@ -74,7 +67,29 @@ export default function Playground({
   act: Act;
   principal?: Row;
   seed?: { text: string };
-}) {
+};
+
+export default function Playground(props: PlaygroundProps) {
+  const [mode, setMode] = useState<'chat' | 'images'>('chat');
+  const hasImages = props.models.some((m) => m.capability === 'image');
+  return (
+    <>
+      {hasImages && (
+        <div className="tabs" role="tablist" aria-label="Playground mode">
+          <button type="button" role="tab" aria-selected={mode === 'chat'} onClick={() => setMode('chat')}>
+            Chat
+          </button>
+          <button type="button" role="tab" aria-selected={mode === 'images'} onClick={() => setMode('images')}>
+            Images
+          </button>
+        </div>
+      )}
+      {mode === 'images' && hasImages ? <ImageStudio models={props.models} canWrite={props.canWrite} act={props.act} /> : <ChatPlayground {...props} />}
+    </>
+  );
+}
+
+function ChatPlayground({ models, routers = [], knowledge, canWrite, act, principal, seed }: PlaygroundProps) {
   const toast = useToast();
   const owner = principal ? `${principal.tenant}:${principal.username}` : 'local';
   const chatKey = 'nuvora-chats:' + owner;

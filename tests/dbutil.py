@@ -4,7 +4,7 @@ import os
 
 from nuvora.store import Store
 
-TABLES = ('objects','users','tokens','audit','usage','cache','idempotency','login_failures','workers','schema_version')
+TABLES = ('objects','users','tokens','audit','usage','cache','idempotency','login_failures','workers','artifacts','schema_version')
 
 
 def make_store(path):
