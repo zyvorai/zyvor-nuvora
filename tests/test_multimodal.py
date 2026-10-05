@@ -123,6 +123,16 @@ class MultimodalTests(StubModels):
         self.json('/api/extract',{'text':'x','fields':{'Bad Name':{'type':'string'}}},expect=400)
         self.json('/api/extract',{'text':'x','fields':{'a':{'type':'money'}}},expect=400)
 
+    def test_bare_values_are_kept_without_confidence(self):
+        mid=self.model(lambda m:json.dumps({'fields':{'invoice':'INV-42','total':'1250.50','due':'2026-11-01'}}),name='Small')[0]
+        job=self.app.new_job(self.p,'extract',None,{'text':'Invoice INV-42','fields':self.FIELDS,'model':mid,'review':False},None)
+        self.app.process_job(self.p,job['id'])
+        result=self.app.get(self.p,'jobs',job['id'])['result']
+        self.assertEqual(result['fields']['total'],{'value':1250.5,'confidence':0.0})
+        self.assertEqual(result['fields']['invoice']['value'],'INV-42')
+        self.assertEqual(sorted(result['low_confidence']),['due','invoice','total'])
+        self.assertFalse(result['malformed'])
+
     def test_low_confidence_goes_to_review(self):
         mid=self.extractor(.4)
         for decision,status in (('approved','completed'),('rejected','rejected')):

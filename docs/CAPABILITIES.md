@@ -10,16 +10,16 @@ Evidence terms: **local test** means exercised in this repository; **adapter** m
 | Service tokens | Local test | Only viewer/developer roles; no approval authority; hash stored at rest; listed and revoked by owner or admin; revoked when the owner is demoted below developer |
 | Password change and member management | Local test | Password change revokes your other sessions; admins change roles or remove members; you can't change yourself and the last admin is protected |
 | OpenAI-compatible completion | Adapter + local HTTP test | Buffered or live-streamed; mapped usage; Fabric/Gryvia presets and `/v1/models` discovery; live Fabric/Gryvia endpoints not exercised |
-| Ollama native completion | Adapter + local HTTP test | No native Ollama tool-call path; use its OpenAI endpoint for agents |
+| Ollama native completion | Adapter + local HTTP test + live (CPU) | Exercised live with qwen2.5 and granite3.2-vision by `scripts/e2e-live.py`; no native Ollama tool-call path, so use its OpenAI endpoint for agents |
 | AWS provider (Converse / ConverseStream) | Adapter + mocked client test | Optional boto3; AWS account, model access and region required; no tool calling |
 | Cascade routers | Local test | 2–5 chat models tried cheapest first; escalate on empty answer, unsure phrasing or judge score below `min_score`; tool-call answers accepted at once; `router:<id>` in console and `/v1`; no latency-aware or learned routing |
 | Image generation | Adapter + local HTTP test | OpenAI-compatible `b64_json` image endpoints and a synthetic demo; five sizes, up to 4 images; artifacts expire after `NUVORA_ARTIFACT_TTL_DAYS`; no editing or variations; live image models not exercised |
 | Model hosting and GPU scheduling | Roadmap/integration | Provided externally by Fabric/Gryvia or your trainer; no model binaries launched by Nuvora |
 | Document upload and extraction | Local test | txt, md, csv, json, html, docx (stdlib) and pdf (pypdf extra) up to 20 MB; images and scanned PDFs via a vision model or the `ocr` extra (Tesseract); audio via a transcription model; no video |
 | Knowledge connectors | Local test (stub servers) | Web crawler (robots.txt, depth and page limits), S3 prefix, Confluence space; incremental sync by content digest, removing deleted pages; 15 minutes to 7 days between syncs; hosts limited to `NUVORA_CONNECTOR_HOSTS`; live S3/Confluence not exercised |
-| Structured extraction | Local test | `/api/extract` and workflow extract steps fill typed fields (string, number, integer, boolean, date) with confidence; results below `min_confidence` wait for approval |
+| Structured extraction | Local test | `/api/extract` and workflow extract steps fill typed fields (string, number, integer, boolean, date) with confidence; with `review` set, results below `min_confidence` wait for approval; bare values from small models are kept at confidence 0 |
 | Hybrid lexical retrieval | Local test | BM25 fused with hashed lexical vectors, stopwords and light stemming; recall@1 fixture gate in CI; vectors are not semantic embeddings |
-| External semantic embeddings | Adapter + local HTTP test | OpenAI-compatible and Ollama `/api/embed`; no live embedding-model quality benchmark |
+| External semantic embeddings | Adapter + local HTTP test + live (CPU) | OpenAI-compatible and Ollama `/api/embed`; nomic-embed-text exercised live; no embedding-model quality benchmark |
 | LLM rerank | Local test | Optional chat-model rerank of the top 20; falls back to fused order on bad output |
 | Retrieved citations | Local test | Source, document id, chunk, byte-position-as-Python-character-offset, SHA-256; retrieved evidence is not proof of answer correctness |
 | Document-level ACL | Local test | Documents carry metadata (filters with equality or `in`, up to 10 keys) and user groups; retrieval drops documents outside the caller's groups; no entity resolution or per-chunk ACL |

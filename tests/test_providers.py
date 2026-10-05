@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import json
+import os
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
-from nuvora.providers import Providers,post_json
+from unittest import mock
+from nuvora.providers import Providers,post_json,provider_timeout
 from nuvora.security import Fault
 
 class Stub(BaseHTTPRequestHandler):
@@ -23,6 +25,13 @@ class Stub(BaseHTTPRequestHandler):
         raw=json.dumps(value).encode();self.send_response(200);self.send_header('Content-Length',str(len(raw)));self.end_headers();self.wfile.write(raw)
 
 class ProviderTests(unittest.TestCase):
+    def test_provider_timeout_is_bounded(self):
+        for value,expected in ((None,45),('120',120),('1',5),('5000',900),('soon',45)):
+            with mock.patch.dict(os.environ,{} if value is None else {'NUVORA_PROVIDER_TIMEOUT':value}):
+                if value is None:
+                    os.environ.pop('NUVORA_PROVIDER_TIMEOUT',None)
+                self.assertEqual(provider_timeout(),expected)
+
     @classmethod
     def setUpClass(cls):
         cls.server=ThreadingHTTPServer(('127.0.0.1',0),Stub)

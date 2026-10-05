@@ -1704,7 +1704,8 @@ class Platform:
             raw={}
         fields={}
         for name,field in spec['fields'].items():
-            item=raw.get(name) if isinstance(raw.get(name),dict) else {}
+            # Small models often return bare values; keep them, with no confidence, so a person reviews them.
+            item=raw.get(name) if isinstance(raw.get(name),dict) else {'value':raw[name],'confidence':0} if isinstance(raw.get(name),(str,int,float,bool)) else {}
             try:
                 value=self.coerce(field['type'],item.get('value'))
                 confidence=float(item.get('confidence',0))

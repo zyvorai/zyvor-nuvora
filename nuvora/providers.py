@@ -15,11 +15,19 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         raise Fault('Provider redirects are disabled',502)
 
 
-def post_json(url, body, headers, allowlist, timeout=45, limit=8*1024*1024):
+def provider_timeout():
+    """Seconds to wait for a provider response: NUVORA_PROVIDER_TIMEOUT, 5–900, default 45."""
+    try:
+        return min(900,max(5,int(os.getenv('NUVORA_PROVIDER_TIMEOUT','45'))))
+    except ValueError:
+        return 45
+
+
+def post_json(url, body, headers, allowlist, timeout=None, limit=8*1024*1024):
     validate_url(url,allowlist)
     request=urllib.request.Request(url,json.dumps(body).encode(),{'Content-Type':'application/json',**headers},method='POST')
     try:
-        with urllib.request.build_opener(NoRedirect).open(request,timeout=timeout) as response:
+        with urllib.request.build_opener(NoRedirect).open(request,timeout=timeout or provider_timeout()) as response:
             raw=response.read(limit+1)
             if len(raw)>limit:
                 raise Fault('Provider response too large',502)
@@ -37,7 +45,7 @@ def stream_lines(url, body, headers, allowlist):
     request=urllib.request.Request(url,json.dumps(body).encode(),{'Content-Type':'application/json',**headers},method='POST')
     total=0
     try:
-        with urllib.request.build_opener(NoRedirect).open(request,timeout=45) as response:
+        with urllib.request.build_opener(NoRedirect).open(request,timeout=provider_timeout()) as response:
             for raw in response:
                 total+=len(raw)
                 if total>8*1024*1024:

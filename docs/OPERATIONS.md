@@ -18,6 +18,7 @@
 | `NUVORA_TRAINER_SERVING_URL`, `NUVORA_TRAINER_SERVING_KEY_ENV` | Where trained models are served when the trainer doesn't report a URL, and the `NUVORA_SECRET_*` name of its key |
 | `NUVORA_ARTIFACT_TTL_DAYS` | How long generated images are kept, 1–365 days (default 7) |
 | `NUVORA_OTEL_ENDPOINT` | OTLP/HTTP traces endpoint, such as `http://collector:4318/v1/traces`. Spans carry timings, models and costs, never prompt or answer text |
+| `NUVORA_PROVIDER_TIMEOUT` | Seconds to wait for a model provider, 5–900 (default 45). Raise it for CPU-only models, where long grounded prompts can take minutes |
 
 Optional Python extras: `pdf` (pypdf), `sso` (cryptography, for bearer JWTs), `postgres` (psycopg), `aws` (boto3), `ocr` (pytesseract and Pillow; also needs the `tesseract` binary, which the container image includes), or `all`. The core runs on the standard library; a missing extra returns 503 with an install hint.
 

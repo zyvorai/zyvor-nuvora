@@ -31,10 +31,27 @@ Provider network tests ran against a local HTTP stub for OpenAI-compatible compl
   - The screenshots in `docs/ux/` are from this run.
 - `helm lint`, `helm template` (including the `env` and `envFromSecret` rejection paths), and `scripts/ci-deploy-guards.sh` (34 checks) passed.
 
+## Live models (CPU-only lab host)
+
+`scripts/e2e-live.py` ran against Nuvora on loopback and Ollama 0.32 on the same 12-core host, without a GPU. **16 of 16 checks passed** with `NUVORA_PROVIDER_TIMEOUT=300`:
+- qwen2.5:1.5b for chat, `/v1` streaming, grounded answers (2 citations), the classifier, extraction and the router judge
+- qwen2.5:0.5b as the router's first tier, qwen2.5:3b for the agent, granite3.2-vision for vision and OCR, nomic-embed-text for embeddings
+- PII masking and blocking, word filters, metadata filters, the usage ledger and audit verification
+
+What the run showed:
+- The classifier blocked a request for weapon instructions (violence, misconduct, prompt attack) and allowed a soup recipe.
+- OCR of a printed note read both lines, but dropped one digit from a ticket number and repeated one line.
+- qwen2.5:1.5b and moondream are too small for some tasks. The 1.5B model answers without calling tools, and moondream returns empty answers for the OCR and colour prompts. qwen2.5:3b called the tool, but still missed the answer in the retrieved passage.
+- qwen2.5:1.5b returns extraction fields without confidences. Nuvora now keeps those values at confidence 0.
+- The router's first tier passed the judge every time, so this run did not observe an escalation.
+- With the default 45-second timeout, a grounded answer on CPU timed out, which is why `NUVORA_PROVIDER_TIMEOUT` exists.
+
+These results show that the adapters work end to end with real models. They do not measure answer quality.
+
 ## Not completed here
 
 - Multi-node Kubernetes, ingress, and HA tests: only a single k3s node was used.
-- Live AWS, GPU, vLLM, Ollama, embedding, vision, transcription, classifier or image-model tests: no live endpoint or hardware supplied.
+- Live AWS, GPU, vLLM, transcription or image-model tests: no live endpoint or hardware supplied. Ollama chat, embedding, vision and classifier models ran on CPU only (see above).
 - A live trainer, MCP server, S3 bucket or Confluence space: only stubs were used.
 - A real identity provider (Keycloak, Entra ID, Okta) and live Netra, Zyntra or Keep installs: only stubs were used.
 - Several Nuvora replicas on one PostgreSQL inside Kubernetes: the leasing logic is covered by tests, not a multi-pod run.

@@ -16,6 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import quote, urlsplit, unquote
 from . import __version__, integrations, oidc as sso
 from .platform import Platform, KINDS
+from .providers import provider_timeout
 from .security import Auth, Fault, require
 from .store import Store, canonical
 
@@ -273,7 +274,7 @@ class Handler(BaseHTTPRequestHandler):
                                   'transport':'direct TLS' if getattr(self.server,'direct_tls',False) else ('TLS proxy' if self.server.secure else 'loopback HTTP'),
                                   'demo_models':demo,'worker':'running' if getattr(app,'worker_thread',None) and app.worker_thread.is_alive() else 'stopped',
                                   'policy':app.policy(p),'budget':app.usage_series(p,1)['budget'],
-                                  'limits':{'chat_timeout_seconds':45,'body_bytes':1024*1024,'media_body_bytes':UPLOAD_BODY,'upload_bytes':20*1024*1024,'images_per_request':4,'max_messages':100,'max_output_tokens':8192,'concurrent_calls_per_user':4}})
+                                  'limits':{'chat_timeout_seconds':provider_timeout(),'body_bytes':1024*1024,'media_body_bytes':UPLOAD_BODY,'upload_bytes':20*1024*1024,'images_per_request':4,'max_messages':100,'max_output_tokens':8192,'concurrent_calls_per_user':4}})
                 return
             if path=='/api/password' and method=='POST':
                 app.auth.change_password(p,body.get('current',''),body.get('new',''),token)

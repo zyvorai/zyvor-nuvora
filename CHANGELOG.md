@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Live end-to-end check:** `scripts/e2e-live.py` runs chat, `/v1` streaming, embedding retrieval with filters, grounded answers, guardrails with a classifier model, a cascade router, a tool-using agent, vision, OCR and extraction against a real Ollama. All 16 checks passed on a CPU-only host.
+- **Provider timeout:** `NUVORA_PROVIDER_TIMEOUT` (5–900 s, default 45) replaces the fixed 45-second provider timeout. Settings shows the value in effect.
+- **Extraction:** bare field values from small models are kept at confidence 0 instead of being dropped, so they always count as low confidence.
+
 ## 0.3.0 — 2026-10-05
 
 - **Guardrails v2:** policies gain word and regex filters, plus PII entities (email, IBAN with mod-97, card numbers with Luhn, SSN, IPv4, phone) that are masked or blocked. Also adds a lexical grounding score against retrieved sources, and an optional classifier model for hate, violence, sexual, self-harm, misconduct and prompt attacks, which fails closed. `POST /api/guardrails/check` tests a policy, and the console gets a policy editor. [Guardrails →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/guardrails)
@@ -12,7 +18,7 @@
   - per-step timing with an optional OTLP trace export and a run waterfall
 
   [Agents and tools →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/agents-and-tools)
-- **Multimodal:** chat accepts image content parts on OpenAI-compatible, Ollama and AWS providers. Uploads can OCR images and scans (a vision model or the `ocr` extra) and transcribe audio. `POST /api/extract` fills a typed field blueprint and sends low-confidence results to an approval. [Multimodal →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/multimodal)
+- **Multimodal:** chat accepts image content parts on OpenAI-compatible, Ollama and AWS providers. Uploads can OCR images and scans (a vision model or the `ocr` extra) and transcribe audio. `POST /api/extract` fills a typed field blueprint and can send low-confidence results to an approval. [Multimodal →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/multimodal)
 - **Connectors and access control:** web crawler, S3 and Confluence connectors, with scheduled incremental sync, restricted to `NUVORA_CONNECTOR_HOSTS`. Documents carry metadata for retrieval filters, plus user groups that limit who can retrieve them. [Connectors →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/connectors)
 - **Training:** validated JSONL datasets. LoRA, QLoRA and distillation jobs run on your own trainer (`NUVORA_TRAINER_URL`). Nuvora polls each job and registers the resulting model. [Training →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/training)
 - **Images:** an `image` model capability with `image_price`, `POST /api/images` and `/v1/images/generations`, and expiring artifacts. Adds a Playground **Images** tab and a `generate_image` workflow step. [Images →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/images)
