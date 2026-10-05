@@ -203,8 +203,8 @@ export default function CreateForm({
           )}
           <div className="form-grid">
             <Field label="Provider">
-              <select value={data.provider} onChange={(e) => set('provider', e.target.value)}>
-                {['openai', 'ollama', 'bedrock', 'demo'].map((p) => (
+              <select value={data.provider === 'bedrock' ? 'aws' : data.provider} onChange={(e) => set('provider', e.target.value)}>
+                {['openai', 'ollama', 'aws', 'demo'].map((p) => (
                   <option key={p}>{p}</option>
                 ))}
               </select>
@@ -216,7 +216,7 @@ export default function CreateForm({
               </select>
             </Field>
           </div>
-          {data.provider !== 'demo' && data.provider !== 'bedrock' && field('base_url', 'Base URL · host must be allowed by the operator')}
+          {data.provider !== 'demo' && data.provider !== 'aws' && data.provider !== 'bedrock' && field('base_url', 'Base URL · host must be allowed by the operator')}
           {found && found.length > 0 ? (
             <Field label="Upstream model">
               <select
@@ -243,7 +243,7 @@ export default function CreateForm({
             </button>
           )}
           {found && !found.length && <p className="note">The endpoint answered but listed no models.</p>}
-          {data.provider === 'bedrock' ? field('region', 'AWS region') : field('key_env', 'Secret environment reference (optional)')}
+          {data.provider === 'aws' || data.provider === 'bedrock' ? field('region', 'AWS region') : field('key_env', 'Secret environment reference (optional)')}
           <div className="form-grid">
             {field('input_price', 'USD / million input tokens', 'number')}
             {field('output_price', 'USD / million output tokens', 'number')}

@@ -35,6 +35,6 @@ Provider network tests ran against a local HTTP stub for OpenAI-compatible compl
 - Live AWS, GPU, vLLM, Ollama or embedding-model tests: no live endpoint or hardware supplied.
 - A real identity provider (Keycloak, Entra ID, Okta) and live Netra, Zyntra or Keep installs: only stubs were used.
 - Several Nuvora replicas on one PostgreSQL inside Kubernetes: the leasing logic is covered by tests, not a multi-pod run.
-- Bedrock quality/cost/latency benchmark or compliance equivalence: not performed.
+- Quality, cost or latency benchmarks against managed AI platforms: not performed.
 
 GitHub Actions runs the backend matrix, the PostgreSQL job, the console build and tests, the deploy checks, and a Chromium smoke test against a local demo server.

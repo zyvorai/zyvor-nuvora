@@ -22,7 +22,7 @@ In the console, **Models → Add model** offers presets for the Fabric AI gatewa
 |---|---|---|
 | `openai` | vLLM, llama.cpp, Fabric, Gryvia, any OpenAI-compatible server | Supports tool calls; use it for agents |
 | `ollama` | Native Ollama at `http://127.0.0.1:11434`, chat and `/api/embed` embeddings | For agents, use Ollama's `/v1` endpoint with `openai` |
-| `bedrock` | AWS Bedrock Converse and ConverseStream | `pip install '.[aws]'`; standard AWS credential chain; no tools |
+| `aws` | AWS-hosted models through Converse and ConverseStream | `pip install '.[aws]'`; standard AWS credential chain; no tools |
 | `demo` | Offline evaluation | Synthetic, and always labeled |
 
 ## Rules the server enforces

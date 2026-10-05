@@ -12,7 +12,7 @@ export function Models({ rows }: { rows: Row[] }) {
       renderAction={(r) => <span className="muted small">{money(r.input_price)} / 1M input</span>}
       emptyIcon={Cpu}
       emptyTitle="Connect your first model"
-      emptyText="Add an OpenAI-compatible, Ollama or Bedrock endpoint. Credentials stay in environment variables, never in the catalog."
+      emptyText="Add an OpenAI-compatible, Ollama or AWS endpoint. Credentials stay in environment variables, never in the catalog."
     />
   );
 }

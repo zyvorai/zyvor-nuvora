@@ -81,7 +81,7 @@ class OpenAIStreamTests(LiveServer):
         self.assertIn('OFFLINE DEMO',text)
 
 
-class BedrockStreamTests(unittest.TestCase):
+class AwsStreamTests(unittest.TestCase):
     def test_converse_stream_mapping(self):
         events=[{'messageStart':{'role':'assistant'}},{'contentBlockDelta':{'delta':{'text':'Hi '}}},{'contentBlockDelta':{'delta':{'text':'there.'}}},
                 {'messageStop':{'stopReason':'end_turn'}},{'metadata':{'usage':{'inputTokens':9,'outputTokens':4}}}]
@@ -89,7 +89,7 @@ class BedrockStreamTests(unittest.TestCase):
         client.converse_stream.return_value={'stream':iter(events)}
         fake=types.SimpleNamespace(client=lambda *a,**k:client)
         with mock.patch.dict(sys.modules,{'boto3':fake}):
-            out=list(Providers().stream({'provider':'bedrock','upstream_model':'anthropic.x','region':'eu-central-1'},[{'role':'system','content':'Be brief'},{'role':'user','content':'hi'}]))
+            out=list(Providers().stream({'provider':'aws','upstream_model':'anthropic.x','region':'eu-central-1'},[{'role':'system','content':'Be brief'},{'role':'user','content':'hi'}]))
         self.assertEqual([o['delta'] for o in out if 'delta' in o],['Hi ','there.'])
         self.assertEqual(out[-1]['usage'],{'prompt_tokens':9,'completion_tokens':4})
         kwargs=client.converse_stream.call_args.kwargs
@@ -103,6 +103,11 @@ class BedrockStreamTests(unittest.TestCase):
             with self.assertRaises(Fault) as ctx:
                 list(Providers().stream({'provider':'bedrock','upstream_model':'x'},[{'role':'user','content':'hi'}]))
         self.assertEqual(ctx.exception.status,502)
+
+    def test_legacy_provider_name_is_normalized(self):
+        model={'provider':'bedrock','upstream_model':'x','region':'us-east-1'}
+        Providers().validate(model)
+        self.assertEqual(model['provider'],'aws')
 
 
 if __name__=='__main__':

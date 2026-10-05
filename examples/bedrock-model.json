@@ -1,1 +1,0 @@
-{"name":"Bedrock model","provider":"bedrock","upstream_model":"REPLACE_WITH_YOUR_ENABLED_MODEL_OR_INFERENCE_PROFILE_ID","region":"us-east-1","capability":"chat","input_price":0,"output_price":0}

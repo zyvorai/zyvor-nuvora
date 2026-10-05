@@ -11,7 +11,7 @@ Evidence terms: **local test** means exercised in this repository; **adapter** m
 | Password change and member management | Local test | Password change revokes your other sessions; admins change roles or remove members; you can't change yourself and the last admin is protected |
 | OpenAI-compatible completion | Adapter + local HTTP test | Buffered or live-streamed; mapped usage; Fabric/Gryvia presets and `/v1/models` discovery; live Fabric/Gryvia endpoints not exercised |
 | Ollama native completion | Adapter + local HTTP test | No native Ollama tool-call path; use its OpenAI endpoint for agents |
-| Bedrock Converse / ConverseStream | Adapter + mocked client test | Optional boto3; AWS account, model access and region required; no tool calling |
+| AWS provider (Converse / ConverseStream) | Adapter + mocked client test | Optional boto3; AWS account, model access and region required; no tool calling |
 | Model hosting and GPU scheduling | Roadmap/integration | Provided externally by Fabric/Gryvia; no model binaries launched by NUVORA |
 | Document upload and extraction | Local test | txt, md, csv, json, html, docx (stdlib) and pdf (pypdf extra) up to 20 MB; no OCR, no crawling, no connector sync |
 | Hybrid lexical retrieval | Local test | BM25 fused with hashed lexical vectors, stopwords and light stemming; recall@1 fixture gate in CI; vectors are not semantic embeddings |
@@ -34,7 +34,7 @@ Evidence terms: **local test** means exercised in this repository; **adapter** m
 | Inference budget/concurrency | Local test | Chat tokens and estimated configured cost; four calls per user; embeddings excluded |
 | Prompt/result cache | Local test | Opt-in, temperature zero, tenant/model/policy fingerprint, five-minute TTL; tools never cached |
 | Batch requests | Local test | Up to 100 items; per-item failure; no AWS-style batch discount |
-| SSE transport | Local test + adapter | `/api/chat/stream` and `/v1/chat/completions` (`stream=true`, OpenAI chunk frames) stream OpenAI-compatible, Ollama and Bedrock output as it arrives, released at sentence boundaries after guardrail checks; closing the client stops the upstream read |
+| SSE transport | Local test + adapter | `/api/chat/stream` and `/v1/chat/completions` (`stream=true`, OpenAI chunk frames) stream OpenAI-compatible, Ollama and AWS output as it arrives, released at sentence boundaries after guardrail checks; closing the client stops the upstream read |
 | Evaluation / regression gate | Local test | Assertions, LLM-judge criteria and groundedness per case, with reasons; malformed judge output scores 0; no human review queue or production release integration |
 | LoRA/QLoRA/distillation/quantization | Recipe | Export only; no training job submitted or model modified |
 | Multimodal data automation | Roadmap | Workflow extract node projects fields from JSON; OCR/audio/video not implemented |

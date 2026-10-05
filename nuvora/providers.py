@@ -53,7 +53,9 @@ class Providers:
         self.allowed_hosts=set(allowed_hosts if allowed_hosts is not None else os.getenv('NUVORA_PROVIDER_HOSTS','localhost,127.0.0.1').split(','))
 
     def validate(self,model):
-        if model['provider'] not in ('demo','openai','ollama','bedrock'):
+        if model.get('provider')=='bedrock':
+            model['provider']='aws'
+        if model['provider'] not in ('demo','openai','ollama','aws'):
             raise Fault('Unknown provider')
         if model['provider'] in ('openai','ollama'):
             validate_url(model.get('base_url',''),self.allowed_hosts)
@@ -71,16 +73,16 @@ class Providers:
                 args={'query':text} if name=='knowledge_search' else {}
                 return {'content':'','tool_calls':[{'id':'demo-call','type':'function','function':{'name':name,'arguments':json.dumps(args)}}],'usage':{'prompt_tokens':len(text)//4+1,'completion_tokens':10},'evidence_class':'synthetic'}
             return {'content':'[OFFLINE DEMO — no model inference] '+text[:1800],'tool_calls':[],'usage':{'prompt_tokens':sum(len(str(m)) for m in messages)//4+1,'completion_tokens':len(text)//4+12},'evidence_class':'synthetic'}
-        if kind=='bedrock':
+        if kind=='aws':
             if tools:
-                raise Fault('Bedrock tool calling is not supported in this release; use an OpenAI-compatible agent model',422)
-            client=self._bedrock_client(model)
+                raise Fault('AWS tool calling is not supported in this release; use an OpenAI-compatible agent model',422)
+            client=self._aws_client(model)
             system=[{'text':m['content']} for m in messages if m['role']=='system']
             history=[{'role':m['role'],'content':[{'text':m['content']}]} for m in messages if m['role'] in ('user','assistant')]
             try:
                 raw=client.converse(modelId=model['upstream_model'],messages=history,system=system,inferenceConfig={'maxTokens':max_tokens,'temperature':temperature})
             except Exception as exc:
-                raise Fault('Bedrock invocation failed',502) from exc
+                raise Fault('AWS model invocation failed',502) from exc
             usage=raw.get('usage',{})
             return {'content':''.join(c.get('text','') for c in raw['output']['message']['content']),'tool_calls':[],'usage':{'prompt_tokens':usage.get('inputTokens',0),'completion_tokens':usage.get('outputTokens',0)},'evidence_class':'provider'}
         url=model['base_url'].rstrip('/')
@@ -115,8 +117,8 @@ class Providers:
         """Yield {'delta': text} pieces, then {'usage': {...}, 'evidence_class': ...}."""
         self.validate(model)
         kind=model['provider']
-        if kind=='bedrock':
-            yield from self._bedrock_stream(model,messages,max_tokens,temperature)
+        if kind=='aws':
+            yield from self._aws_stream(model,messages,max_tokens,temperature)
             return
         if kind=='demo':
             result=self.chat(model,messages,None,max_tokens,temperature)
@@ -164,21 +166,21 @@ class Providers:
                     yield {'delta':text}
         yield {'usage':usage,'evidence_class':'provider'}
 
-    def _bedrock_client(self,model):
+    def _aws_client(self,model):
         try:
             import boto3
         except ImportError as exc:
-            raise Fault('Install nuvora[aws] for the Bedrock provider',503) from exc
+            raise Fault('Install nuvora[aws] for the AWS provider',503) from exc
         return boto3.client('bedrock-runtime',region_name=model.get('region','us-east-1'))
 
-    def _bedrock_stream(self,model,messages,max_tokens,temperature):
-        client=self._bedrock_client(model)
+    def _aws_stream(self,model,messages,max_tokens,temperature):
+        client=self._aws_client(model)
         system=[{'text':m['content']} for m in messages if m['role']=='system']
         history=[{'role':m['role'],'content':[{'text':m['content']}]} for m in messages if m['role'] in ('user','assistant')]
         try:
             raw=client.converse_stream(modelId=model['upstream_model'],messages=history,system=system,inferenceConfig={'maxTokens':max_tokens,'temperature':temperature})
         except Exception as exc:
-            raise Fault('Bedrock invocation failed',502) from exc
+            raise Fault('AWS model invocation failed',502) from exc
         usage={}
         try:
             for event in raw['stream']:
@@ -190,11 +192,11 @@ class Providers:
                     usage={'prompt_tokens':u.get('inputTokens',0),'completion_tokens':u.get('outputTokens',0)}
                 for key in ('internalServerException','modelStreamErrorException','throttlingException','validationException','serviceUnavailableException'):
                     if key in event:
-                        raise Fault('Bedrock stream failed',502)
+                        raise Fault('AWS model stream failed',502)
         except Fault:
             raise
         except Exception as exc:
-            raise Fault('Bedrock stream failed',502) from exc
+            raise Fault('AWS model stream failed',502) from exc
         yield {'usage':usage,'evidence_class':'provider'}
 
     def embed(self,model,texts):

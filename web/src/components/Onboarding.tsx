@@ -14,7 +14,7 @@ export function onboardingSteps(collections: Collections, overview: Row): Step[]
     {
       id: 'model',
       title: 'Connect a production model',
-      text: 'Point Nuvora at an OpenAI-compatible, Ollama or Bedrock endpoint on the operator allow-list.',
+      text: 'Point Nuvora at an OpenAI-compatible, Ollama or AWS endpoint on the operator allow-list.',
       page: 'models',
       cta: 'Add a model',
       done: (collections.models || []).some((m) => m.provider !== 'demo'),

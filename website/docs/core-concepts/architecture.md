@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # Architecture
 
-Nuvora is a Python standard-library HTTP server with a background worker and a compiled React console on the same origin. It stores data in SQLite by default, or in PostgreSQL for several replicas. Optional extras add PDF parsing (`pdf`), SSO bearer verification (`sso`), PostgreSQL (`postgres`) and Bedrock (`aws`); the container image bundles all of them.
+Nuvora is a Python standard-library HTTP server with a background worker and a compiled React console on the same origin. It stores data in SQLite by default, or in PostgreSQL for several replicas. Optional extras add PDF parsing (`pdf`), SSO bearer verification (`sso`), PostgreSQL (`postgres`) and AWS models (`aws`); the container image bundles all of them.
 
 ![How a request flows through Nuvora](/readme-how-it-works.jpg)
 

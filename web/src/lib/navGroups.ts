@@ -49,7 +49,7 @@ export const navGroups: NavGroup[] = [
     label: 'Workspace',
     children: [
       { page: 'playground', label: 'Playground', blurb: 'Ask a model, optionally grounded in a knowledge base, with cited evidence.' },
-      { page: 'models', label: 'Models', blurb: 'OpenAI-compatible, Ollama and Bedrock endpoints, with operator pricing.' },
+      { page: 'models', label: 'Models', blurb: 'OpenAI-compatible, Ollama and AWS endpoints, with operator pricing.' },
       { page: 'knowledge', label: 'Knowledge', blurb: 'Index documents and inspect exactly what retrieval returns.' },
     ],
   },

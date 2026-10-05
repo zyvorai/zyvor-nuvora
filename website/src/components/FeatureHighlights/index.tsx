@@ -13,7 +13,7 @@ const FeatureList: FeatureItem[] = [
   {
     title: 'Your models',
     description:
-      'Fabric and Gryvia presets with model discovery, any OpenAI-compatible server, Ollama, optional Bedrock, and a labeled offline demo. Exact host allow-list; credentials stay in environment variables.',
+      'Fabric and Gryvia presets with model discovery, any OpenAI-compatible server, Ollama, optional AWS models, and a labeled offline demo. Exact host allow-list; credentials stay in environment variables.',
     to: '/docs/operate/integrations',
   },
   {

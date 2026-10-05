@@ -10,7 +10,7 @@ WORKDIR /app
 COPY pyproject.toml README.md LICENSE NOTICE ./
 COPY nuvora/ ./nuvora/
 COPY --from=console /src/nuvora/static ./nuvora/static/
-# Optional extras (PDF parsing, SSO JWT verification, Postgres, Bedrock) ship in the image.
+# Optional extras (PDF parsing, SSO JWT verification, Postgres, AWS) ship in the image.
 RUN pip install --no-cache-dir '.[all]' && rm -rf /app/*
 RUN groupadd --gid 10001 nuvora && useradd --uid 10001 --gid 10001 --no-create-home nuvora && mkdir /data && chown nuvora:nuvora /data
 USER 10001:10001

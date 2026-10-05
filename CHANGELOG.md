@@ -13,7 +13,7 @@
 - **Integrations:** Fabric/Gryvia model presets and model discovery. Netra read tools (`netra_status`, `netra_incidents`, `netra_flow_summary`, `netra_drop_explain`). A workflow `handoff` step that parks a run as `waiting_external` until Zyntra decides. Keep `run_code`, executed only after a different person approves the exact code. The Settings page adds an Integrations card with connection tests.
 - **Documents:** file upload for txt, md, json, csv, html and docx (PDF with the `pdf` extra), with a per-route body limit. Deleting a document removes it from every knowledge base.
 - **Evaluations and retrieval:** LLM-judge and grounded cases, a case editor, and per-case reasons in Runs. Adds Ollama embeddings, optional LLM rerank, and stemming with stopwords. A recall@k fixture test guards retrieval quality.
-- **Streaming:** `/v1/chat/completions` streams live from the provider, and Bedrock uses `converse_stream`.
+- **Streaming:** `/v1/chat/completions` streams live from the provider, and the AWS provider uses `converse_stream`.
 - **Release:** optional extras (`pdf`, `sso`, `postgres`, `aws`, `all`) with the core still standard-library only. The image bundles every extra. A tag workflow publishes the ghcr.io image, wheel, Helm chart and SBOM. SPDX headers are checked in CI.
 - **Deploy:** `deploy-remote.sh` generates a random administrator password on the first deploy. The demo login `Admin@321` is opt-in with `NUVORA_DEMO_PASSWORD=1`.
 - **CI:** a PostgreSQL job runs the backend suite and a migration round trip against postgres:16.

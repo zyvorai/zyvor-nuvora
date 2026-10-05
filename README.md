@@ -23,9 +23,9 @@
 
 ---
 
-> **0.2.0 is an evaluation release. It is not Bedrock parity and not a production certification.**
+> **0.2.0 is an evaluation release. It is not managed-platform parity and not a production certification.**
 > - Model invocation works against configured OpenAI-compatible or Ollama endpoints.
-> - An optional boto3 adapter supports Bedrock Converse and streaming, without tools.
+> - An optional boto3 adapter supports AWS-hosted models (Converse and streaming), without tools.
 > - The bundled offline model is explicitly synthetic.
 > - SSO, PostgreSQL with several replicas, and the Netra/Zyntra/Keep integrations are new and tested against stubs, not yet against every IdP or production install.
 > - GPU training, managed model hosting, multi-region HA, and classifier-based guardrails are not implemented.
@@ -50,7 +50,7 @@ From [CHANGELOG.md](CHANGELOG.md):
 
 | When this happens… | Nuvora gives you… |
 |---|---|
-| You can't send prompts or documents to a hosted AI vendor | Your own endpoints only (vLLM, Ollama, OpenAI-compatible, Bedrock), on an exact host allow-list |
+| You can't send prompts or documents to a hosted AI vendor | Your own endpoints only (vLLM, Ollama, OpenAI-compatible, AWS), on an exact host allow-list |
 | Answers sound right, but nobody can say where they came from | Hybrid BM25 + vector retrieval with cited passages and content digests on every answer |
 | An agent wants to send, write, or spend | The step pauses, and a different person approves the exact action, fingerprint included |
 | Audit asks what happened six weeks ago | A hash-chained audit log you can export and verify offline |
@@ -143,7 +143,7 @@ Choose the provider explicitly in Playground, or use `auto`:
 
 For a local Ollama native adapter, choose `ollama` with base URL `http://127.0.0.1:11434`. For tool-using agents with Ollama, use its OpenAI-compatible `/v1` endpoint with provider `openai`.
 
-Optional Bedrock access: run `python3 -m pip install '.[aws]'`, then create a Bedrock model with a region and an enabled model or inference-profile identifier.
+Optional AWS access: run `python3 -m pip install '.[aws]'`, then create an `aws` model with a region and an enabled model or inference-profile identifier.
 - boto3 uses the standard AWS credential chain.
 - This path hasn't been validated against a live AWS account.
 
@@ -151,7 +151,7 @@ Optional Bedrock access: run `python3 -m pip install '.[aws]'`, then create a Be
 
 | Area | Runnable behavior |
 |---|---|
-| Models | Catalog, explicit or price-based routing, OpenAI/Ollama adapters, optional Bedrock adapter |
+| Models | Catalog, explicit or price-based routing, OpenAI/Ollama adapters, optional AWS adapter |
 | Knowledge | File upload (txt/md/json/csv/html/docx, PDF via extra), chunking, content hashes, BM25 + lexical-vector fusion, OpenAI/Ollama embeddings, optional LLM rerank |
 | Agents | Bounded model/tool loop, registered tool schemas, read tools, Netra evidence tools, Keep `run_code` behind approval, session memory, human-approved memory writes |
 | Connectors & actions | Typed admin-registered enterprise APIs; external writes wait for independent exact-argument approval |
@@ -193,7 +193,7 @@ The README artwork is rendered from HTML: run `./docs/social/build.sh` (see [doc
 - [Operations](docs/OPERATIONS.md)
 - [Deploy](docs/deploy.md)
 - [UX contract](docs/design/APPLE-UX-CONTRACT.md)
-- [Bedrock comparison](docs/BEDROCK-COMPARISON.md)
+- [Capability map](docs/COMPARISON.md)
 - [Roadmap](docs/ROADMAP.md)
 
 ## Repository layout

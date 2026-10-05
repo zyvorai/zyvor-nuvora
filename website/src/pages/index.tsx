@@ -75,7 +75,7 @@ function ProblemStatement() {
               vendor, and can't trust an answer nobody can trace. Nuvora runs
               on your hardware and talks only to model endpoints on your
               allow-list. That can be vLLM, Ollama, any OpenAI-compatible
-              server, or Bedrock. Every grounded answer cites the passage it
+              server, or AWS. Every grounded answer cites the passage it
               came from.
             </p>
             <p>

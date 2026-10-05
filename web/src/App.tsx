@@ -39,7 +39,7 @@ import { Actions, Models, Recipes } from './pages/Catalog';
 
 const pageHero: Partial<Record<Page, { title: string; lede: string; tint?: HeroTint }>> = {
   playground: { title: 'Ask. Ground. Verify.', lede: 'Choose a model, optionally ground it in a knowledge base, and see the exact passages behind every answer.' },
-  models: { title: 'Choose the model. Keep the control.', lede: 'OpenAI-compatible, Ollama and optional Bedrock endpoints on an operator allowlist. Credentials stay in the environment, never in the catalog.' },
+  models: { title: 'Choose the model. Keep the control.', lede: 'OpenAI-compatible, Ollama and optional AWS endpoints on an operator allowlist. Credentials stay in the environment, never in the catalog.' },
   knowledge: { title: 'Answers start with evidence.', lede: 'Index documents with content digests, then inspect exactly what BM25 and vector fusion retrieve before a model sees it.', tint: 'green' },
   agents: { title: 'Give intelligence a purpose.', lede: 'Bounded model and tool loops with registered schemas. Memory writes and external actions pause for a different human.', tint: 'purple' },
   actions: { title: 'Connect the systems you trust.', lede: 'Typed enterprise APIs registered by an administrator. Writes wait for an exact-argument approval and never retry on their own.', tint: 'purple' },
