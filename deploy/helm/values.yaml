@@ -1,6 +1,6 @@
 image:
   repository: ghcr.io/zyvorai/zyvor-nuvora
-  tag: "0.2.0"
+  tag: "0.3.0"
   pullPolicy: IfNotPresent
 # Secret with key `password`: the first administrator's password (first start only).
 adminSecret: nuvora-admin
@@ -10,6 +10,16 @@ allowDemoPassword: false
 # Seed the offline demo workspace (synthetic model, knowledge base, agent, workflow).
 demo: false
 providerHosts: "localhost,127.0.0.1"
+# Other NUVORA_* settings, e.g.
+#   NUVORA_CONNECTOR_HOSTS: "docs.example.com,wiki.example.com"
+#   NUVORA_TRAINER_URL: "https://trainer.example.com"
+#   NUVORA_NETRA_URL: "https://netra.example.com"
+#   NUVORA_ARTIFACT_TTL_DAYS: "7"
+#   NUVORA_OTEL_ENDPOINT: "http://otel-collector:4318/v1/traces"
+env: {}
+# Secret whose keys become environment variables: the NUVORA_SECRET_* credentials
+# that models, actions, MCP servers, connectors and integrations reference.
+envFromSecret: ""
 service:
   type: ClusterIP
   port: 8789

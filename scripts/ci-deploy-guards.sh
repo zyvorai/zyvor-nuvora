@@ -15,7 +15,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STUB="$(mktemp -d "${TMPDIR:-/tmp}/nuvora-guards.XXXXXX")"
 trap 'rm -rf "$STUB"' EXIT
 export STUB
-IMG="ghcr.io/zyvorai/zyvor-nuvora:0.2.0"
+IMG="ghcr.io/zyvorai/zyvor-nuvora:0.3.0"
 
 pass=0
 fail=0

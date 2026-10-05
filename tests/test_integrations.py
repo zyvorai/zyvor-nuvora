@@ -10,7 +10,7 @@ class IntegrationTest(LiveServer):
     def setUp(self):
         super().setUp()
         self.devp = {'tenant': 'a', 'username': 'dev', 'role': 'developer'}
-        self.model = self.app.list(self.p, 'models')[0]['id']
+        self.model = next(m for m in self.app.list(self.p, 'models') if m['capability'] == 'chat')['id']
         self.env = {}
         self.app.integrations.env = self.env
 

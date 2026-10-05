@@ -1,6 +1,24 @@
 # Changelog
 
-## 0.2.0 — 2026-10-05
+## 0.3.0 — 2026-10-05
+
+- **Guardrails v2:** policies gain word and regex filters, plus PII entities (email, IBAN with mod-97, card numbers with Luhn, SSN, IPv4, phone) that are masked or blocked. Also adds a lexical grounding score against retrieved sources, and an optional classifier model for hate, violence, sexual, self-harm, misconduct and prompt attacks, which fails closed. `POST /api/guardrails/check` tests a policy, and the console gets a policy editor. [Guardrails →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/guardrails)
+- **Routers:** a router cascades across 2–5 chat models. It escalates on an empty answer, an "I'm not sure" reply, or a judge score below `min_score`. Use it as `router:<id>` anywhere a model is accepted, including `/v1`. Cached prompt tokens are billed at `cached_input_price`, and usage shows savings. Policies can set `cache_ttl`. [Routing →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/routing)
+- **Prompt experiments:** prompts carry weighted variants with sticky per-subject rendering. An experiment runs each variant against an evaluation suite and compares scores.
+- **Agents and tools:**
+  - import an OpenAPI 3 document as typed actions
+  - register remote MCP servers, whose writing tools wait for approval
+  - long-term memory search and approved session summaries
+  - per-step timing with an optional OTLP trace export and a run waterfall
+
+  [Agents and tools →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/agents-and-tools)
+- **Multimodal:** chat accepts image content parts on OpenAI-compatible, Ollama and AWS providers. Uploads can OCR images and scans (a vision model or the `ocr` extra) and transcribe audio. `POST /api/extract` fills a typed field blueprint and sends low-confidence results to an approval. [Multimodal →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/multimodal)
+- **Connectors and access control:** web crawler, S3 and Confluence connectors, with scheduled incremental sync, restricted to `NUVORA_CONNECTOR_HOSTS`. Documents carry metadata for retrieval filters, plus user groups that limit who can retrieve them. [Connectors →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/connectors)
+- **Training:** validated JSONL datasets. LoRA, QLoRA and distillation jobs run on your own trainer (`NUVORA_TRAINER_URL`). Nuvora polls each job and registers the resulting model. [Training →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/training)
+- **Images:** an `image` model capability with `image_price`, `POST /api/images` and `/v1/images/generations`, and expiring artifacts. Adds a Playground **Images** tab and a `generate_image` workflow step. [Images →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/images)
+- **Helm:** `env` sets extra `NUVORA_*` variables and `envFromSecret` loads credentials from a Secret. Rendering rejects other variable names and inline `NUVORA_SECRET_*` values.
+- **Branding:** the managed-cloud vendor name is gone from the code and copy. The provider is `aws`, and `bedrock` is still accepted as an alias.
+- **Website:** a redesigned homepage and seven new Operate guides.
 
 - **Single sign-on:** OIDC authorization code flow with PKCE (`nuvora/oidc.py`). Adds bearer JWT verification against the issuer JWKS (`sso` extra), just-in-time users, group-to-role mapping on every login, and an optional tenant claim. The sign-in page gains a **Sign in with SSO** button. Configure with `NUVORA_OIDC_*` or the Helm `oidc.*` values.
 - **PostgreSQL:** `nuvora/db.py` puts SQLite and PostgreSQL behind one adapter, selected with `NUVORA_DATABASE_URL` (`postgres` extra). Also adds:

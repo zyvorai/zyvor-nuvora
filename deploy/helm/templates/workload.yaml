@@ -98,7 +98,20 @@ spec:
         {{- end }}
         {{- end }}
         {{- end }}
+        {{- range $name, $value := .Values.env }}
+        {{- if not (regexMatch "^NUVORA_[A-Z0-9_]+$" $name) }}
+        {{- fail (printf "env.%s: only NUVORA_* variables may be set here" $name) }}
+        {{- end }}
+        {{- if hasPrefix "NUVORA_SECRET_" $name }}
+        {{- fail (printf "env.%s: put credentials in envFromSecret, not in values" $name) }}
+        {{- end }}
+        - {name: {{ $name }}, value: {{ $value | toString | quote }}}
+        {{- end }}
         - {name: PYTHONDONTWRITEBYTECODE, value: "1"}
+        {{- with .Values.envFromSecret }}
+        envFrom:
+        - secretRef: {name: {{ . | quote }}}
+        {{- end }}
         resources: {{ toYaml .Values.resources | nindent 10 }}
         securityContext:
           readOnlyRootFilesystem: true

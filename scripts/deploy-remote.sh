@@ -35,7 +35,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-VERSION="0.2.0"
+VERSION="0.3.0"
 IMAGE="ghcr.io/zyvorai/zyvor-nuvora:${VERSION}"
 NAMESPACE="nuvora-system"
 PROFILE="k3s"

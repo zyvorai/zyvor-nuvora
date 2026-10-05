@@ -3,6 +3,6 @@
   "position": 3,
   "link": {
     "type": "generated-index",
-    "description": "Single sign-on, PostgreSQL and replicas, Zyvor platform integrations, documents and evaluations."
+    "description": "Single sign-on, PostgreSQL and replicas, integrations, documents and evaluations, guardrails, routers, agents and tools, connectors, multimodal extraction, training and images."
   }
 }

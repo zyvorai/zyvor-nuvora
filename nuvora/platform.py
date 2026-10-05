@@ -1905,6 +1905,7 @@ class Platform:
     def seed(self,p):
         if self.list(p,'models'):
             return
+        self.create(p,'models',{'name':'Offline demo images','provider':'demo','upstream_model':'demo-image','capability':'image','image_price':0})
         model=self.create(p,'models',{'name':'Offline demo','provider':'demo','upstream_model':'demo','input_price':0,'output_price':0})
         kb=self.create(p,'knowledge',{'name':'Zyvor field guide'})
         self.ingest(p,kb['id'],{'name':'NUVORA operations guide','text':'NUVORA connects models, knowledge and agents on infrastructure you control. Keep isolates agent execution in microVMs. Gryvia supplies Kubernetes GPU serving and training. Zyntra provides ontology and human approved decisions. Network investigations can use Netra evidence. Production changes require a different human approver. Every inference request is metered. Offline demo responses are synthetic and do not use an LLM.','source':'bundled demo fixture'})

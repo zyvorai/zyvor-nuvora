@@ -361,7 +361,7 @@ function Console() {
         <footer className="app-footer">
           <span>Nuvora · Zyvor Platform</span>
           <span>Private by deployment. Accountable by design.</span>
-          <span>Evaluation release · 0.2.0</span>
+          <span>Evaluation release · 0.3.0</span>
         </footer>
       </main>
       {drawerRow && (

@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/zyvorai/zyvor-nuvora/actions/workflows/ci.yml/badge.svg)](https://github.com/zyvorai/zyvor-nuvora/actions/workflows/ci.yml)
 [![License: Zyvor Production v1.0](https://img.shields.io/badge/License-Zyvor%20Production%20v1.0-orange.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.0-informational)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.0-informational)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/Python-3.11%2B%20stdlib-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![React](https://img.shields.io/badge/React-console-61DAFB?logo=react&logoColor=black)](web)
 [![Docs](https://img.shields.io/badge/Docs-zyvorai.github.io%2Fzyvor--nuvora-0071e3)](https://zyvorai.github.io/zyvor-nuvora/)
@@ -23,26 +23,30 @@
 
 ---
 
-> **0.2.0 is an evaluation release. It is not managed-platform parity and not a production certification.**
+> **0.3.0 is an evaluation release. It is not managed-platform parity and not a production certification.**
 > - Model invocation works against configured OpenAI-compatible or Ollama endpoints.
 > - An optional boto3 adapter supports AWS-hosted models (Converse and streaming), without tools.
 > - The bundled offline model is explicitly synthetic.
-> - SSO, PostgreSQL with several replicas, and the Netra/Zyntra/Keep integrations are new and tested against stubs, not yet against every IdP or production install.
-> - GPU training, managed model hosting, multi-region HA, and classifier-based guardrails are not implemented.
+> - Guardrails v2, routers, MCP tools, connectors, OCR, training and images are new in 0.3.0. They are tested against stubs and the offline model, not yet against every provider, trainer or source system.
+> - Nuvora calls your trainer and your image model; it does not host GPUs or models itself. Multi-region HA is not implemented.
 >
 > Check the [capability matrix](docs/CAPABILITIES.md) before relying on any feature.
 
-## What's new
+## What's new in 0.3.0
 
 From [CHANGELOG.md](CHANGELOG.md):
 
 | | |
 |---|---|
-| **Single sign-on** | OIDC code flow with PKCE, bearer JWTs, just-in-time users and group-to-role mapping. [SSO →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/sso) |
-| **PostgreSQL and replicas** | `NUVORA_DATABASE_URL` switches storage. Jobs are leased across workers, and the audit chain stays linear. Includes a SQLite migration script. [Postgres →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/postgres) |
-| **Platform integrations** | Fabric/Gryvia presets with model discovery, Netra evidence tools, Zyntra handoff steps, and Keep sandboxed code with approval. [Integrations →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/integrations) |
-| **Documents and evaluations** | Upload PDF, DOCX, HTML, CSV and more. Evaluations add LLM-judge and grounded cases, plus a case editor with per-case reasons. Live `/v1` streaming. |
-| **One-command k3s deploy** | `./scripts/deploy-remote.sh HOST USER` builds on the host, imports into k3s, serves HTTPS on NodePort 30789, and generates the admin password. [Docs →](docs/deploy.md) |
+| **Guardrails v2** | Word and regex filters, checksum-validated PII masking, a grounding score, and an optional classifier model that fails closed. [Guardrails →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/guardrails) |
+| **Routers** | Try a cheaper model first and escalate on an empty, unsure or low-scoring answer. Cached-token pricing shows the savings. [Routing →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/routing) |
+| **Agents and tools** | OpenAPI import, remote MCP servers with approval for writers, long-term memory, and OTLP traces. [Agents →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/agents-and-tools) |
+| **Multimodal** | Image input in chat, OCR and audio transcription on upload, and typed extraction with confidence review. [Multimodal →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/multimodal) |
+| **Connectors and ACLs** | Web, S3 and Confluence sync. Metadata filters and group access on documents. [Connectors →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/connectors) |
+| **Training and images** | LoRA, QLoRA and distillation on your own trainer, plus image generation in the Playground, the API and workflows. [Training →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/training) |
+| **Prompt experiments** | Weighted prompt variants, compared on an evaluation suite. |
+
+Single sign-on, PostgreSQL with replicas, and platform integrations arrived in [0.2.0](CHANGELOG.md#020--2026-10-05).
 
 ---
 
@@ -75,7 +79,7 @@ Open **http://127.0.0.1:8789** and sign in as `admin` with the password from you
 - There's no built-in default password locally. The 12-character minimum is relaxed only for the deploy script's demo password (see below).
 
 The demo seeds:
-- a synthetic model and a knowledge base
+- synthetic chat and image models, and a knowledge base
 - an investigator agent and an approval workflow
 - a prompt, an evaluation suite, and an external-training recipe
 
@@ -139,7 +143,7 @@ In **Models**, create an `openai` provider with the base URL of your OpenAI-comp
 Choose the provider explicitly in Playground, or use `auto`:
 - `auto` picks the lowest configured input-plus-output price among the real chat providers that are enabled.
 - It falls back to the demo only when no real provider exists.
-- This is price-based selection, not a quality-aware router.
+- This is price-based selection. For quality-aware escalation, create a router and use `router:<id>`.
 
 For a local Ollama native adapter, choose `ollama` with base URL `http://127.0.0.1:11434`. For tool-using agents with Ollama, use its OpenAI-compatible `/v1` endpoint with provider `openai`.
 
@@ -151,15 +155,15 @@ Optional AWS access: run `python3 -m pip install '.[aws]'`, then create an `aws`
 
 | Area | Runnable behavior |
 |---|---|
-| Models | Catalog, explicit or price-based routing, OpenAI/Ollama adapters, optional AWS adapter |
-| Knowledge | File upload (txt/md/json/csv/html/docx, PDF via extra), chunking, content hashes, BM25 + lexical-vector fusion, OpenAI/Ollama embeddings, optional LLM rerank |
-| Agents | Bounded model/tool loop, registered tool schemas, read tools, Netra evidence tools, Keep `run_code` behind approval, session memory, human-approved memory writes |
+| Models | Catalog, explicit or price-based selection, cascade routers, OpenAI/Ollama adapters, optional AWS adapter, image models, trainer-backed LoRA/QLoRA/distillation |
+| Knowledge | File upload (txt/md/json/csv/html/docx, PDF via extra), OCR and audio transcription, web/S3/Confluence connectors, metadata filters, group ACLs, BM25 + lexical-vector fusion, OpenAI/Ollama embeddings, optional LLM rerank |
+| Agents | Bounded model/tool loop, registered tool schemas, OpenAPI-imported actions, MCP server tools, Netra evidence tools, Keep `run_code` behind approval, long-term memory, OTLP step traces |
 | Connectors & actions | Typed admin-registered enterprise APIs; external writes wait for independent exact-argument approval |
-| Workflows | Ordered DAG validation, retrieve/generate/template/condition/extract/review/handoff nodes, durable checkpoints, Zyntra handoff |
-| Prompts | Variable validation, optimistic revision edits, retained version snapshots |
+| Workflows | Ordered DAG validation, retrieve/generate/template/condition/extract/review/handoff/generate_image nodes, durable checkpoints, Zyntra handoff |
+| Prompts | Variable validation, optimistic revision edits, retained version snapshots, weighted variants, experiments on evaluation suites |
 | Evaluation | Contains/excludes, LLM-judge and grounded cases, per-case reasons, scores, release verdicts, comparable-suite regression endpoint |
 | Governance | OIDC SSO, tenant isolation, viewer/developer/approver/admin roles, scoped and revocable service tokens, member role management, separate-human approvals |
-| Guardrails | Topic patterns, instruction-override patterns, size limits, email/account redaction; applied to inputs/outputs |
+| Guardrails | Word and regex filters, PII masking or blocking (email, IBAN, card, SSN, IPv4, phone), grounding score, classifier model, size limits; applied to inputs/outputs |
 | Inference operations | Live guardrail-checked streaming in the console and on `/v1`, deterministic cache, batch jobs, token budgets, concurrency caps |
 | Evidence | Job traces, source digests, hash-chained audit with filters, CSV and JSON exports, offline chain verification |
 | Console | Command palette, streaming playground with model compare, resource drawers with history and diff, workflow builder, run inspector with inline approval, usage charts |

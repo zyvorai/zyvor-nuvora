@@ -24,7 +24,7 @@ class PlatformTests(unittest.TestCase):
         self.viewer={'tenant':'a','username':'reader','role':'viewer'}
         self.other={'tenant':'b','username':'owner','role':'admin'}
         self.app.seed(self.admin)
-        self.model=self.app.list(self.admin,'models')[0]['id']
+        self.model=next(m for m in self.app.list(self.admin,'models') if m['capability']=='chat')['id']
         self.kb=self.app.list(self.admin,'knowledge')[0]['id']
 
     def tearDown(self):

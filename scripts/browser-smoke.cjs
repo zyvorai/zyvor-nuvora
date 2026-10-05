@@ -15,7 +15,7 @@ const user=process.env.NUVORA_TEST_USER||'admin';
 const password=process.env.NUVORA_TEST_PASSWORD||'Nuvora-Test-Password-123';
 const shots=path.resolve(process.env.NUVORA_SCREENSHOT_DIR||path.join(process.cwd(),'docs','screenshots'));
 
-const pages=['overview','playground','models','knowledge','agents','actions','workflows','prompts','recipes','jobs','evaluations','batches','approvals','policies','usage','audit','users','keys','settings'];
+const pages=['overview','playground','models','routers','knowledge','connectors','agents','actions','mcp_servers','workflows','prompts','recipes','jobs','evaluations','batches','approvals','policies','usage','audit','users','keys','settings'];
 
 (async()=>{
   fs.mkdirSync(shots,{recursive:true});
@@ -64,6 +64,14 @@ const pages=['overview','playground','models','knowledge','agents','actions','wo
   await page.getByRole('button',{name:'Generate answer'}).waitFor({timeout:30000});
   assert.equal(await page.locator('.answer').count(),2);checks++;
   await shot('02-playground');
+
+  await page.getByRole('tab',{name:'Images'}).click();
+  await page.getByLabel('Prompt',{exact:true}).fill('A lighthouse on a calm sea at dawn');
+  await page.getByRole('button',{name:'Generate',exact:true}).click();
+  await page.locator('.image-grid img').first().waitFor({timeout:30000});
+  assert(await page.locator('.image-grid img').first().evaluate(img=>img.complete&&img.naturalWidth>0));checks++;
+  await shot('19-images');
+  await page.getByRole('tab',{name:'Chat'}).click();
 
   await page.keyboard.press('Control+k');
   await page.getByRole('combobox',{name:'Command'}).fill('setings');

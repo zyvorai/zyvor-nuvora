@@ -13,8 +13,13 @@
 | `NUVORA_DATABASE_URL` | `postgresql://…` to use PostgreSQL instead of the `--db` SQLite file (needs the `postgres` extra) |
 | `NUVORA_OIDC_ISSUER`, `NUVORA_OIDC_CLIENT_ID`, `NUVORA_OIDC_CLIENT_SECRET`, `NUVORA_OIDC_*` | Single sign-on; see the [SSO guide](https://zyvorai.github.io/zyvor-nuvora/docs/operate/sso) for the role map, tenant and identity claims |
 | `NUVORA_NETRA_URL`, `NUVORA_ZYNTRA_URL`, `NUVORA_KEEP_URL` | Platform integrations; tokens in `NUVORA_SECRET_<SYSTEM>_TOKEN`; hosts must be on `NUVORA_PROVIDER_HOSTS`. `NUVORA_KEEP_IMAGE` picks the sandbox image |
+| `NUVORA_CONNECTOR_HOSTS` | Exact comma-separated hostnames that web, S3 and Confluence connectors may reach. Empty (the default) refuses every connector |
+| `NUVORA_TRAINER_URL` | Trainer service for fine-tuning and distillation jobs; token in `NUVORA_SECRET_TRAINER_TOKEN`; host must be on `NUVORA_PROVIDER_HOSTS` |
+| `NUVORA_TRAINER_SERVING_URL`, `NUVORA_TRAINER_SERVING_KEY_ENV` | Where trained models are served when the trainer doesn't report a URL, and the `NUVORA_SECRET_*` name of its key |
+| `NUVORA_ARTIFACT_TTL_DAYS` | How long generated images are kept, 1–365 days (default 7) |
+| `NUVORA_OTEL_ENDPOINT` | OTLP/HTTP traces endpoint, such as `http://collector:4318/v1/traces`. Spans carry timings, models and costs, never prompt or answer text |
 
-Optional Python extras: `pdf` (pypdf), `sso` (cryptography, for bearer JWTs), `postgres` (psycopg), `aws` (boto3), or `all`. The core runs on the standard library; a missing extra returns 503 with an install hint.
+Optional Python extras: `pdf` (pypdf), `sso` (cryptography, for bearer JWTs), `postgres` (psycopg), `aws` (boto3), `ocr` (pytesseract and Pillow; also needs the `tesseract` binary, which the container image includes), or `all`. The core runs on the standard library; a missing extra returns 503 with an install hint.
 
 Direct TLS:
 
@@ -27,7 +32,7 @@ python3 -m nuvora.server --host 0.0.0.0 --tls-cert /run/tls/cert.pem --tls-key /
 ## Container
 
 ```bash
-docker build -f deploy/Dockerfile -t zyvor-nuvora:0.2.0 .
+docker build -f deploy/Dockerfile -t zyvor-nuvora:0.3.0 .
 export NUVORA_ADMIN_PASSWORD='choose-your-own-strong-password'
 docker compose -f deploy/compose.yaml up -d
 ```
@@ -94,6 +99,6 @@ Anyone can change their password from the account menu; that signs out their oth
 
 ## Limits
 
-Chat timeout 45 seconds to providers (a streamed answer may run longer while data keeps arriving), 1 MiB API body (28 MiB for uploads, 20 MB per file), up to 100 chat messages, max 8192 output tokens, up to 100 batch items, max 20 agent steps, four concurrent calls per user per replica. Each replica's worker executes serially. Inference rates are configured estimates. Embedding and rerank requests are not yet included in the chat budget/ledger.
+Chat timeout 45 seconds to providers (a streamed answer may run longer while data keeps arriving), 1 MiB API body (28 MiB for uploads, chat with images, extraction and datasets; 20 MB per file), up to 4 images per request at 7 MB each, up to 100 chat messages, max 8192 output tokens, up to 100 batch items, max 20 agent steps, four concurrent calls per user per replica. Each replica's worker executes serially. Inference rates are configured estimates. Embedding and rerank requests are not yet included in the chat budget/ledger.
 
 No destructive production tools are registered. Adding one must include an exact action schema, scoped authorization, separate-human approval, idempotency, preconditions, outcome validation and a rollback procedure. Code runs only through Keep's `run_code`, after a different person approves the exact code, in a sandbox without network.

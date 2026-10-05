@@ -3,7 +3,7 @@
 # Nuvora — deploy guards (adapted from Zyvor Netra), sourced on the target host by scripts/deploy-remote.sh.
 #
 # deploy-remote.sh builds the image on the host and imports it into k3s's
-# containerd under a FIXED tag (ghcr.io/zyvorai/zyvor-nuvora:0.2.0), then runs
+# containerd under a FIXED tag (ghcr.io/zyvorai/zyvor-nuvora:0.3.0), then runs
 # `helm upgrade`. Kubelet garbage-collects images that no pod uses once the disk
 # passes its high threshold (85% by default). A freshly imported image is unused
 # until the new pod starts, so on a disk near that line it can be collected in the

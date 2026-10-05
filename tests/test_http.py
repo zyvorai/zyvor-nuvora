@@ -79,7 +79,7 @@ class HTTPTests(unittest.TestCase):
         self.assertIn(b'data: [DONE]',raw)
 
     def test_http_tenant_boundary(self):
-        model=self.app.list({'tenant':'a','username':'owner','role':'admin'},'models')[0]
+        model=next(m for m in self.app.list({'tenant':'a','username':'owner','role':'admin'},'models') if m['capability']=='chat')
         code,_,_=self.request('/api/models/'+model['id'],headers={'Authorization':'Bearer '+self.other})
         self.assertEqual(code,404)
 
