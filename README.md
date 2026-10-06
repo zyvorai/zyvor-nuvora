@@ -6,129 +6,157 @@
 [![License: Zyvor Production v1.0](https://img.shields.io/badge/License-Zyvor%20Production%20v1.0-orange.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.3.0-informational)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/Python-3.11%2B%20stdlib-3776AB?logo=python&logoColor=white)](pyproject.toml)
-[![React](https://img.shields.io/badge/React-console-61DAFB?logo=react&logoColor=black)](web)
 [![Docs](https://img.shields.io/badge/Docs-zyvorai.github.io%2Fzyvor--nuvora-0071e3)](https://zyvorai.github.io/zyvor-nuvora/)
 
-![Nuvora: private AI that shows its work. Ask, ground, act, approve, prove.](docs/social/nuvora-hero-dark.jpg)
+### The AI platform you run. Every answer cited. Every action approved.
 
-### Private AI that shows its work.
+Build assistants, agents and workflows on the models you choose, inside your own network. Nuvora grounds every answer in your documents, holds every consequential action for a second person, and keeps a record your auditors can verify.
 
-**A self-hosted AI application platform.** Connect your own model endpoints, ground every answer in cited evidence, run tool-using agents and reviewed workflows, and keep each consequential action behind a different human's approval.
+**[Book a demo](https://zyvor.dev/schedule?utm_source=github&utm_medium=nuvora&utm_campaign=readme_hero)** · **[Start a 30-day PoC](https://zyvor.dev/poc?utm_source=github&utm_medium=nuvora&utm_campaign=readme_hero)** · **[Quickstart](#quickstart)** · **[Docs](https://zyvorai.github.io/zyvor-nuvora/)**
 
-**19 console views** · **4 model adapters** · **Tenant-scoped** · **Author ≠ approver** · **Hash-chained evidence** · **Zero required Python deps**
-
-📖 **[Read the full docs](https://zyvorai.github.io/zyvor-nuvora/)**: quickstart, concepts, security model, and a product tour.
+![Nuvora: ask, ground, act, approve, prove](docs/social/nuvora-hero-dark.jpg)
 
 </div>
 
+| **Your data stays home.** | **Any model, your terms.** | **Nothing acts alone.** | **Proof, not promises.** |
+|---|---|---|---|
+| Prompts, documents and answers stay on infrastructure you run, and an exact host allow-list decides where any request may go. | vLLM, Ollama or any OpenAI-compatible endpoint. Switch models without rewriting the app, and see every token against a budget. | Anything that writes, sends or spends waits for a different person to approve the exact action. | Runs, guardrail decisions and approvals land in a hash-chained audit log you can export and check offline. |
+
 ---
 
-> **0.3.0 is an evaluation release. It is not managed-platform parity and not a production certification.**
-> - Model invocation works against configured OpenAI-compatible or Ollama endpoints.
-> - An optional boto3 adapter supports AWS-hosted models (Converse and streaming), without tools.
-> - The bundled offline model is explicitly synthetic.
-> - Guardrails v2, routers, MCP tools, connectors, OCR, training and images are new in 0.3.0. They are tested against stubs and the offline model, not yet against every provider, trainer or source system.
-> - Nuvora calls your trainer and your image model; it does not host GPUs or models itself. Multi-region HA is not implemented.
->
-> Check the [capability matrix](docs/CAPABILITIES.md) before relying on any feature.
+## Everything you need to put AI in production. In one platform you control.
 
-## What's new in 0.3.0
+### Model choice: use the best model for each job, on your endpoints
 
-From [CHANGELOG.md](CHANGELOG.md):
+Connect the models you already run and pick per task. Discover models automatically, set prices, and let routers start small and escalate only when an answer looks weak.
+
+- vLLM, Ollama, any OpenAI-compatible endpoint, or AWS-hosted models
+- Fabric and Gryvia presets with model discovery
+- An exact host allow-list: nothing reaches a host that is not on it
+
+![Settings with model endpoints and integrations](docs/ux/17-settings.png)
+
+### Your data: AI that knows your business, and who may see what
+
+Upload documents or sync them from your systems. Hybrid retrieval returns the passages behind every answer, filtered by the groups each person belongs to.
+
+- Web, S3 and Confluence connectors with incremental sync
+- OCR for scans, audio transcription, typed extraction with review
+- Fine-tuning and distillation jobs sent to a trainer you run
+
+![Knowledge base with documents and content digests](docs/ux/03-knowledge.png)
+
+### Agents and workflows: agents that do real work, inside the lines
+
+Give agents a closed set of tools: your OpenAPI actions, MCP servers and suite integrations. Chain steps in a visual builder with branches, reviews and handoffs.
+
+- OpenAPI import and remote MCP servers, registered by an admin
+- Session and long-term memory, with writes behind approval
+- Workflow steps for retrieval, extraction, images and Zyntra handoff
+
+![Workflow builder with retrieval, model and approval steps](docs/ux/15-workflow-builder.png)
+
+### Safety and guardrails: one policy, applied to every input, output and tool call
+
+Write guardrails once and they screen prompts, answers and tool arguments alike. When a classifier is unsure or unavailable, the request is blocked, not waved through.
+
+- Word and regex filters, PII detection with checksum validation
+- Grounding checks that score answers against retrieved sources
+- Exact-action approvals: different person, fingerprint, one-hour expiry
+
+![Guardrails with filter, PII and grounding policies](docs/ux/08-guardrails.png)
+
+### Cost control: spend where it matters, and see every token
+
+Cascade routers try the cheapest capable model first. Caching, batch jobs and per-workspace budgets keep costs predictable, and the ledger shows what each run cost.
+
+- Cascade routers that escalate on weak or unsure answers
+- Prompt cache, with provider cached-token pricing tracked separately
+- Token budgets, concurrency caps and batch requests
+
+![Usage ledger with tokens, cost and budget](docs/ux/10-usage.png)
+
+### Evaluate and prove: know it works before you ship. Prove it after
+
+Evaluation suites score grounding and judge criteria per case, and prompt experiments compare variants on the same suite. Every run is traced and every decision recorded.
+
+- Assertions, LLM-judge and grounded cases, with reasons
+- Run waterfall with per-step timing and OpenTelemetry export
+- Hash-chained audit log, exportable and verifiable offline
+
+![Evaluation case editor with grounded and judge criteria](docs/ux/18-eval-case-editor.png)
+
+---
+
+## Take agents to production with full control
+
+Every step an agent takes is bounded, screened and on the record. The moment it wants to change something real, a person signs off on the exact action first.
+
+**Plan → Call a tool → Policy check → Approve → Act → Record**
+
+- A closed tool registry and a fixed step limit. No shell, no open internet.
+- Code runs in a Keep sandbox with no network, only after a different person approves the exact code.
+- Durable jobs survive restarts. Work interrupted by a failed worker is flagged for review, not lost.
+- Every step timed in a run waterfall, exportable to your tracing stack.
+
+![Approvals: agents propose, people decide](docs/ux/readme-approvals.jpg)
+
+## From idea to production, fast
 
 | | |
 |---|---|
-| **Guardrails v2** | Word and regex filters, checksum-validated PII masking, a grounding score, and an optional classifier model that fails closed. [Guardrails →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/guardrails) |
-| **Routers** | Try a cheaper model first and escalate on an empty, unsure or low-scoring answer. Cached-token pricing shows the savings. [Routing →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/routing) |
-| **Agents and tools** | OpenAPI import, remote MCP servers with approval for writers, long-term memory, and OTLP traces. [Agents →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/agents-and-tools) |
-| **Multimodal** | Image input in chat, OCR and audio transcription on upload, and typed extraction with confidence review. [Multimodal →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/multimodal) |
-| **Connectors and ACLs** | Web, S3 and Confluence sync. Metadata filters and group access on documents. [Connectors →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/connectors) |
-| **Training and images** | LoRA, QLoRA and distillation on your own trainer, plus image generation in the Playground, the API and workflows. [Training →](https://zyvorai.github.io/zyvor-nuvora/docs/operate/training) |
-| **Prompt experiments** | Weighted prompt variants, compared on an evaluation suite. |
+| **Ask your documents.** Answers grounded in your policies, contracts and runbooks, with the source passage a click away. | **Assistants that act.** Open the ticket, issue the refund, update the record, after the right person approves. |
+| **Turn documents into data.** Extract typed fields from forms and scans. Low-confidence results wait for a reviewer. | **Images and audio.** Read scans with OCR, transcribe calls, reason over images in chat, and generate images. |
+| **Automate workflows.** Chain retrieval, models, reviews and handoffs into flows that pause wherever a human should decide. | **Explain incidents.** Ask why traffic dropped. Agents read Netra network evidence and cite it in the answer. |
 
-Single sign-on, PostgreSQL with replicas, and platform integrations arrived in [0.2.0](CHANGELOG.md#020--2026-10-05).
+## Everything a hosted AI platform does for you. On ground you own.
+
+| | Typical hosted AI platform | Nuvora |
+|---|---|---|
+| Where it runs | The provider's cloud regions | Your hardware, your cloud account, or fully air-gapped |
+| Where prompts go | To the provider's service | Only to hosts on an exact allow-list you control |
+| Who approves an agent's action | Whatever confirmation steps you configure | A different person, on the exact action, every time |
+| What you can prove | Logs in the provider's monitoring service | A hash-chained audit log you export and verify offline |
+| Where agent code runs | A managed runtime in the provider's cloud | A sandbox with no network, after approval |
+| How model spend works | Metered by the provider | Your endpoints, with a ledger and budgets per workspace |
+
+Hosted platforms bring managed model catalogs and regional compliance programs. Nuvora brings control.
+
+The [capability map](docs/COMPARISON.md) lists what's included and what isn't. It's a design map, not a benchmark.
+
+**[Book a demo](https://zyvor.dev/schedule?utm_source=github&utm_medium=nuvora&utm_campaign=readme_compare)** · **[Start a 30-day PoC](https://zyvor.dev/poc?utm_source=github&utm_medium=nuvora&utm_campaign=readme_compare)**
 
 ---
 
-## Why Nuvora
+## Release status
 
-| When this happens… | Nuvora gives you… |
-|---|---|
-| You can't send prompts or documents to a hosted AI vendor | Your own endpoints only (vLLM, Ollama, OpenAI-compatible, AWS), on an exact host allow-list |
-| Answers sound right, but nobody can say where they came from | Hybrid BM25 + vector retrieval with cited passages and content digests on every answer |
-| An agent wants to send, write, or spend | The step pauses, and a different person approves the exact action, fingerprint included |
-| Audit asks what happened six weeks ago | A hash-chained audit log you can export and verify offline |
-| Teams share one platform but not one data set | Tenant-scoped storage, four roles, and scoped service tokens |
-| Finance asks what AI costs | A usage and cost ledger per workspace, with token budgets and concurrency caps |
-
-![How a request flows through Nuvora](docs/ux/readme-how-it-works.jpg)
-
-![Nuvora capabilities](docs/ux/readme-capabilities.jpg)
+> **0.3.0 is an evaluation release, not a production certification.**
+> - Model calls work against configured OpenAI-compatible or Ollama endpoints. The optional AWS adapter (boto3, Converse and streaming) has no tool calling and hasn't been validated against a live account.
+> - The bundled offline model is synthetic.
+> - Guardrails v2, routers, MCP tools, connectors, OCR, training and images are new in 0.3.0. They're tested against stubs and the offline model, not against every provider, trainer or source system.
+> - Nuvora calls your trainer and your image model. It doesn't host GPUs or models. Multi-region HA isn't implemented.
+>
+> Check the [capability matrix](docs/CAPABILITIES.md) before relying on any feature. What changed: [CHANGELOG.md](CHANGELOG.md).
 
 ## Quickstart
 
 The API and the included compiled console need only Python **3.11+**. The offline demo doesn't need a GPU, a cluster, `pip install`, or a hosted model.
 
 ```bash
+git clone https://github.com/zyvorai/zyvor-nuvora.git && cd zyvor-nuvora
 export NUVORA_ADMIN_PASSWORD='choose-your-own-strong-password'
 python3 -m nuvora.server --demo
 ```
 
-Open **http://127.0.0.1:8789** and sign in as `admin` with the password from your environment, in workspace `default`.
-- The first start creates the administrator. Changing the variable later doesn't reset the password.
-- There's no built-in default password locally. The 12-character minimum is relaxed only for the deploy script's demo password (see below).
+Open **http://127.0.0.1:8789** and sign in as `admin` in workspace `default`, with the password from your environment. The first start creates the administrator, and changing the variable later doesn't reset it. There's no built-in default password.
 
-The demo seeds:
-- synthetic chat and image models, and a knowledge base
-- an investigator agent and an approval workflow
-- a prompt, an evaluation suite, and an external-training recipe
+The demo seeds synthetic chat and image models, a knowledge base, an investigator agent, an approval workflow, a prompt, an evaluation suite and an external-training recipe. Then:
 
-1. Open **Playground**, choose *Zyvor field guide*, and ask about Keep.
-2. Inspect the retrieved passages and content digests. The demo response is labeled **OFFLINE DEMO**.
-3. Open **Agents**, select the investigator, and queue a run. Inspect its tool trace in **Runs**.
-4. Open **Workflows**, start *Research → review → answer*, and inspect its waiting approval.
-5. In **Access**, add a separate person with the `approver` role. Sign in as that person and approve the exact action.
-6. The worker resumes the pinned workflow revision. Export the completed run evidence.
-
-## Deploy to k3s
-
-The same pattern Netra uses: rsync the tree, build on the host with podman, import into k3s, and run `helm upgrade --install` with a persistent TLS secret.
-
-```bash
-./scripts/deploy-remote.sh 10.0.1.5 ubuntu      # HOST USER, or user@host
-```
-
-The script prints the result when it finishes:
-- **URL:** `https://HOST:30789`, using a self-signed certificate that persists across redeploys.
-- **Sign in:** `admin`, with the password the script generates and prints on the first deploy. Set `NUVORA_ADMIN_PASSWORD` to choose one, or `NUVORA_DEMO_PASSWORD=1` for the lab login `Admin@321`.
-
-Flags:
-- `--quick` skips the image build.
-- `--verify-only` checks health without changing anything.
-- `--dry-run` shows the plan.
-
-Environment variables include `NUVORA_NODE_PORT`, `NUVORA_PROVIDER_HOSTS`, and `NUVORA_DEMO=0`. See [docs/deploy.md](docs/deploy.md) for the full list.
-
-## Tour
-
-| | |
-|---|---|
-| ![Sign in](docs/ux/00-login.png) | ![Overview](docs/ux/01-overview.png) |
-| **Sign in.** A split-screen hero, with the server named on the card. | **Overview.** Onboarding, your intelligence stack, live charts and recent runs. |
-| ![Playground](docs/ux/02-playground.png) | ![Knowledge](docs/ux/03-knowledge.png) |
-| **Playground.** Conversations, streaming, model compare and cited passages. | **Knowledge.** Bases, documents, and content digests. |
-| ![Runs](docs/ux/06-runs.png) | ![Approvals](docs/ux/07-approvals.png) |
-| **Runs.** Every step, in view. | **Approvals.** The exact action, proposer, expiry, and fingerprint. |
-| ![Command palette](docs/ux/14-command-palette.png) | ![Workflows](docs/ux/05-workflows.png) |
-| **⌘K.** Jump to any page, resource or action, or just ask. | **Workflows.** Every resource opens in a drawer; workflows draw their DAG. |
-| ![Workflow builder](docs/ux/15-workflow-builder.png) | ![Usage](docs/ux/10-usage.png) |
-| **Builder.** Add, wire and reorder steps visually, or edit the JSON. | **Usage.** Requests, tokens, cost and latency over time, against the budget. |
-| ![Evidence](docs/ux/09-evidence.png) | ![Dark mode](docs/ux/11-overview-dark.png) |
-| **Evidence.** A verifiable hash chain. | **Dark mode.** One click, remembered on this device. |
-| ![Images](docs/ux/19-images.png) | ![Guardrails](docs/ux/08-guardrails.png) |
-| **Images.** Generate from the Playground; every image is metered and expires. | **Guardrails.** Filters, PII masking, grounding and a classifier, tested before you save. |
-
-![Approvals: agents propose, people decide](docs/ux/readme-approvals.jpg)
+1. In **Playground**, choose *Zyvor field guide* and ask about Keep. Inspect the cited passages and content digests. The response is labeled **OFFLINE DEMO**.
+2. In **Agents**, queue a run of the investigator and inspect its tool trace in **Runs**.
+3. In **Workflows**, start *Research → review → answer* and open its waiting approval.
+4. In **Access**, add a second person with the `approver` role. Sign in as them and approve the exact action.
+5. The worker resumes the pinned workflow revision. Export the run evidence.
 
 ## Connect a real model
 
@@ -138,20 +166,38 @@ export NUVORA_SECRET_VLLM='your-provider-key'
 python3 -m nuvora.server
 ```
 
-In **Models**, create an `openai` provider with the base URL of your OpenAI-compatible endpoint (vLLM, llama.cpp, Fabric, or Gryvia).
-- Loopback HTTP is accepted. Remote hosts require HTTPS and must be on the exact operator allow-list.
-- Credentials reference a `NUVORA_SECRET_*` environment variable. Credential values are never saved in model objects.
+In **Models**, create an `openai` provider with the base URL of your OpenAI-compatible endpoint (vLLM, llama.cpp, Fabric or Gryvia).
+- Loopback HTTP is accepted. Remote hosts need HTTPS and must be on the exact allow-list.
+- Credentials reference a `NUVORA_SECRET_*` environment variable and are never saved in model objects.
+- `auto` picks the lowest configured price among enabled real chat providers, falling back to the demo only when none exists. For quality-aware escalation, create a router and use `router:<id>`.
+- For Ollama, choose `ollama` with `http://127.0.0.1:11434`. For tool-using agents on Ollama, use its OpenAI-compatible `/v1` endpoint with provider `openai`.
+- Optional AWS: `python3 -m pip install '.[aws]'`, then create an `aws` model with a region and an enabled model or inference-profile id. boto3 uses the standard credential chain.
 
-Choose the provider explicitly in Playground, or use `auto`:
-- `auto` picks the lowest configured input-plus-output price among the real chat providers that are enabled.
-- It falls back to the demo only when no real provider exists.
-- This is price-based selection. For quality-aware escalation, create a router and use `router:<id>`.
+## API
 
-For a local Ollama native adapter, choose `ollama` with base URL `http://127.0.0.1:11434`. For tool-using agents with Ollama, use its OpenAI-compatible `/v1` endpoint with provider `openai`.
+Chat, streaming and image endpoints speak the OpenAI wire format, so existing clients point at Nuvora unchanged:
 
-Optional AWS access: run `python3 -m pip install '.[aws]'`, then create an `aws` model with a region and an enabled model or inference-profile identifier.
-- boto3 uses the standard AWS credential chain.
-- This path hasn't been validated against a live AWS account.
+```bash
+curl https://nuvora.example.com/v1/chat/completions \
+  -H "Authorization: Bearer $NUVORA_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "auto", "messages": [{"role": "user", "content": "Summarize the refund policy"}]}'
+```
+
+Use a scoped service token. Every request passes guardrails, routing, budgets and the audit chain. Full reference: [docs/API.md](docs/API.md). A dependency-free Python client lives in [sdk/python](sdk/python).
+
+## Deploy to k3s
+
+```bash
+./scripts/deploy-remote.sh 10.0.1.5 ubuntu      # HOST USER, or user@host
+```
+
+The script rsyncs the tree, builds with podman on the host, imports the image into k3s and runs `helm upgrade --install` with a persistent TLS secret.
+- **URL:** `https://HOST:30789`, with a self-signed certificate that persists across redeploys.
+- **Sign in:** `admin`, with the password generated and printed on first deploy. Set `NUVORA_ADMIN_PASSWORD` to choose one, or `NUVORA_DEMO_PASSWORD=1` for the lab login `Admin@321`.
+- **Flags:** `--quick` skips the image build, `--verify-only` checks health without changes, `--dry-run` shows the plan.
+
+SQLite on one node, PostgreSQL across replicas. Environment variables include `NUVORA_NODE_PORT`, `NUVORA_PROVIDER_HOSTS` and `NUVORA_DEMO=0`. Docker, Compose and the Helm chart live in [deploy/](deploy). See [docs/deploy.md](docs/deploy.md).
 
 ## What is included
 
@@ -160,16 +206,28 @@ Optional AWS access: run `python3 -m pip install '.[aws]'`, then create an `aws`
 | Models | Catalog, explicit or price-based selection, cascade routers, OpenAI/Ollama adapters, optional AWS adapter, image models, trainer-backed LoRA/QLoRA/distillation |
 | Knowledge | File upload (txt/md/json/csv/html/docx, PDF via extra), OCR and audio transcription, web/S3/Confluence connectors, metadata filters, group ACLs, BM25 + lexical-vector fusion, OpenAI/Ollama embeddings, optional LLM rerank |
 | Agents | Bounded model/tool loop, registered tool schemas, OpenAPI-imported actions, MCP server tools, Netra evidence tools, Keep `run_code` behind approval, long-term memory, OTLP step traces |
-| Connectors & actions | Typed admin-registered enterprise APIs; external writes wait for independent exact-argument approval |
 | Workflows | Ordered DAG validation, retrieve/generate/template/condition/extract/review/handoff/generate_image nodes, durable checkpoints, Zyntra handoff |
-| Prompts | Variable validation, optimistic revision edits, retained version snapshots, weighted variants, experiments on evaluation suites |
-| Evaluation | Contains/excludes, LLM-judge and grounded cases, per-case reasons, scores, release verdicts, comparable-suite regression endpoint |
-| Governance | OIDC SSO, tenant isolation, viewer/developer/approver/admin roles, scoped and revocable service tokens, member role management, separate-human approvals |
-| Guardrails | Word and regex filters, PII masking or blocking (email, IBAN, card, SSN, IPv4, phone), grounding score, classifier model, size limits; applied to inputs/outputs |
-| Inference operations | Live guardrail-checked streaming in the console and on `/v1`, deterministic cache, batch jobs, token budgets, concurrency caps |
+| Prompts and evaluation | Version snapshots, weighted variants, experiments on evaluation suites; contains/excludes, LLM-judge and grounded cases with reasons and release verdicts |
+| Governance | OIDC SSO, tenant isolation, viewer/developer/approver/admin roles, scoped and revocable service tokens, separate-human approvals |
+| Guardrails | Word and regex filters, PII masking or blocking (email, IBAN, card, SSN, IPv4, phone), grounding score, classifier model, size limits |
+| Inference operations | Guardrail-checked streaming in the console and on `/v1`, deterministic cache, batch jobs, token budgets, concurrency caps |
 | Evidence | Job traces, source digests, hash-chained audit with filters, CSV and JSON exports, offline chain verification |
-| Console | Command palette, streaming playground with model compare, resource drawers with history and diff, workflow builder, run inspector with inline approval, usage charts |
-| Delivery | SQLite or PostgreSQL, compiled console, Python SDK/CLI, Docker/Compose, release images on ghcr.io, Helm chart with replicas, k3s deploy script, GitHub Actions, unit/API/DOM/browser tests |
+| Delivery | SQLite or PostgreSQL, compiled console, Python SDK/CLI, Docker/Compose, images on ghcr.io, Helm chart with replicas, k3s deploy script |
+
+## More of the console
+
+| | |
+|---|---|
+| ![Playground](docs/ux/02-playground.png) | ![Runs](docs/ux/06-runs.png) |
+| **Playground.** Streaming, model compare and cited passages. | **Runs.** Every step, in view. |
+| ![Evidence](docs/ux/09-evidence.png) | ![Command palette](docs/ux/14-command-palette.png) |
+| **Evidence.** A verifiable hash chain. | **⌘K.** Jump to any page, resource or action. |
+| ![Images](docs/ux/19-images.png) | ![Dark mode](docs/ux/11-overview-dark.png) |
+| **Images.** Metered, guardrailed and expiring. | **Dark mode.** One click, remembered on this device. |
+
+## Where Nuvora fits in the Zyvor suite
+
+Nuvora is the application workspace above Fabric, Gryvia, Aurora and Zyntra. It connects to their model endpoints through its OpenAI-compatible adapter, calls Netra for evidence, hands decisions to Zyntra, and runs code in Keep, all behind operator configuration. It doesn't duplicate their VM execution or Kubernetes scheduling engines.
 
 ## Develop and test
 
@@ -177,37 +235,19 @@ Optional AWS access: run `python3 -m pip install '.[aws]'`, then create an `aws`
 make check                        # backend tests, console tests, console build
 ```
 
-The console uses React, TypeScript, Vite, and lucide-react on the [Zyvor Apple UX contract](docs/design/APPLE-UX-CONTRACT.md).
-
-To run the browser smoke test, install Playwright first, then point it at a running instance:
+The console uses React, TypeScript, Vite and lucide-react on the [Zyvor Apple UX contract](docs/design/APPLE-UX-CONTRACT.md). For the browser smoke test against a running instance:
 
 ```bash
 npm install --no-save --package-lock=false playwright && npx playwright install chromium --only-shell
 NUVORA_TEST_URL=https://HOST:30789 NUVORA_TEST_PASSWORD='YOUR_ADMIN_PASSWORD' node scripts/browser-smoke.cjs
 ```
 
-The smoke test signs in, exercises every page and the evaluate-to-runs flow, verifies the evidence chain, and checks light and dark at 1440px and 390px. It writes its screenshots to `docs/ux/`.
-
-The README artwork is rendered from HTML: run `./docs/social/build.sh` (see [docs/social](docs/social/README.md)).
-
-## Documentation
-
-- [Docs site](https://zyvorai.github.io/zyvor-nuvora/)
-- [Capabilities](docs/CAPABILITIES.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [API](docs/API.md)
-- [Operations](docs/OPERATIONS.md)
-- [Deploy](docs/deploy.md)
-- [UX contract](docs/design/APPLE-UX-CONTRACT.md)
-- [Capability map](docs/COMPARISON.md)
-- [Roadmap](docs/ROADMAP.md)
-
-## Repository layout
+It signs in, exercises every page and the evaluate-to-runs flow, verifies the evidence chain, and checks light and dark at 1440px and 390px. README artwork is rendered from HTML with `./docs/social/build.sh` (see [docs/social](docs/social/README.md)).
 
 ```text
 nuvora/             HTTP API, platform services, storage (SQLite/Postgres), auth, SSO, providers, retrieval, integrations
 nuvora/static/      Prebuilt console; included so the Python-only quickstart works
-web/                React/TypeScript console, Apple design tokens, interaction tests
+web/                React/TypeScript console
 website/            Docusaurus docs site (GitHub Pages)
 sdk/python/         Dependency-free client
 scripts/            deploy-remote.sh, deploy guards, browser smoke, evidence verifier
@@ -216,12 +256,13 @@ deploy/             Dockerfile, Compose, Helm chart
 docs/               Architecture, API, operations, deploy, UX contract, screenshots, social art
 ```
 
-## Why another project?
+## Documentation
 
-Fabric, Gryvia, Aurora, and Zyntra each have a specific job. Nuvora is the application workspace above them: models, knowledge, prompts, agents, workflows, governance, evaluation, and usage.
-- It connects to their model endpoints through its OpenAI-compatible adapter.
-- It calls Netra for evidence, hands decisions to Zyntra, and runs code in Keep, all behind operator configuration.
-- It doesn't duplicate their VM execution or Kubernetes scheduling engines.
+[Docs site](https://zyvorai.github.io/zyvor-nuvora/) · [Capabilities](docs/CAPABILITIES.md) · [Capability map](docs/COMPARISON.md) · [Architecture](docs/ARCHITECTURE.md) · [API](docs/API.md) · [Operations](docs/OPERATIONS.md) · [Deploy](docs/deploy.md) · [Roadmap](docs/ROADMAP.md) · [Changelog](CHANGELOG.md)
+
+## Security and contributing
+
+Report vulnerabilities as described in [SECURITY.md](SECURITY.md). The security model is documented at [zyvorai.github.io/zyvor-nuvora/docs/security](https://zyvorai.github.io/zyvor-nuvora/docs/security). To contribute, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

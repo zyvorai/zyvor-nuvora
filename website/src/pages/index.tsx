@@ -12,6 +12,28 @@ import styles from './index.module.css';
 
 const REPO = 'https://github.com/zyvorai/zyvor-nuvora';
 
+function utm(path: string, campaign: string): string {
+  return `https://zyvor.dev${path}?utm_source=github&utm_medium=nuvora&utm_campaign=${campaign}`;
+}
+
+function SalesButtons({campaign, quickstart}: {campaign: string; quickstart?: boolean}) {
+  return (
+    <div className={styles.heroButtons}>
+      <a className={styles.btnPrimary} href={utm('/schedule', campaign)}>
+        Book a demo
+      </a>
+      <a className={styles.btnGhost} href={utm('/poc', campaign)}>
+        Start a 30-day PoC
+      </a>
+      {quickstart ? (
+        <Link className={styles.btnGhost} to="/docs/getting-started/quickstart">
+          Quickstart
+        </Link>
+      ) : null}
+    </div>
+  );
+}
+
 function Hero() {
   const shot = useBaseUrl('/12-playground-dark.png');
   return (
@@ -23,33 +45,22 @@ function Hero() {
       </div>
       <div className={styles.gridGlow} aria-hidden />
       <div className={clsx('container', styles.heroInner)}>
-        <a className={styles.pill} href="#capabilities">
+        <p className={styles.pill}>
           <span className={styles.pillDot} />
-          New in 0.3: guardrails, routers, MCP agents, multimodal, connectors, training
-          <span aria-hidden> →</span>
-        </a>
+          Self-hosted AI applications and agents
+        </p>
         <Heading as="h1" className={styles.heroTitle}>
-          Private AI
+          The AI platform you run.
           <br />
-          <span className={styles.gradientText}>that shows its work.</span>
+          <span className={styles.gradientText}>Every answer cited. Every action approved.</span>
         </Heading>
         <p className={styles.heroLede}>
-          Build assistants, agents and workflows on your own models. Every answer
-          cites its sources, every consequential action waits for a different
-          person to approve it, and every step lands in an audit chain you can
-          verify offline.
+          Build assistants, agents and workflows on the models you choose, inside
+          your own network. Nuvora grounds every answer in your documents, holds
+          every consequential action for a second person, and keeps a record your
+          auditors can verify.
         </p>
-        <div className={styles.heroButtons}>
-          <Link className={styles.btnPrimary} to="/docs/getting-started/quickstart">
-            Get started
-          </Link>
-          <Link className={styles.btnGhost} to="/gallery">
-            Take the tour
-          </Link>
-          <Link className={styles.btnGhost} to={REPO}>
-            GitHub
-          </Link>
-        </div>
+        <SalesButtons campaign="pages_hero" quickstart />
         <div className={styles.terminal}>
           <span className={styles.prompt}>$</span>
           <code>python3 -m nuvora.server --demo</code>
@@ -67,7 +78,7 @@ function Hero() {
             <img src={shot} alt="Nuvora playground with an answer and the evidence passages behind it" />
           </div>
           <div className={clsx(styles.float, styles.floatA)}>
-            <b>3 sources cited</b>
+            <b>Sources cited</b>
             <span>every passage with a content digest</span>
           </div>
           <div className={clsx(styles.float, styles.floatB)}>
@@ -84,121 +95,249 @@ function Hero() {
   );
 }
 
-const STEPS = [
-  {n: '01', title: 'Ground', body: 'Hybrid retrieval finds the passages behind the answer, filtered by who may see them.'},
-  {n: '02', title: 'Act', body: 'Agents and workflows call your APIs and MCP tools within a bounded budget.'},
-  {n: '03', title: 'Approve', body: 'Anything that writes, sends or spends pauses until a second person signs off.'},
-  {n: '04', title: 'Prove', body: 'Runs, guardrail decisions and approvals land in a hash-chained audit log.'},
+const KICKERS = [
+  {
+    kicker: 'Your data stays home.',
+    body: 'Prompts, documents and answers stay on infrastructure you run, and an exact host allow-list decides where any request may go.',
+  },
+  {
+    kicker: 'Any model, your terms.',
+    body: 'vLLM, Ollama or any OpenAI-compatible endpoint. Switch models without rewriting the app, and see every token against a budget.',
+  },
+  {
+    kicker: 'Nothing acts alone.',
+    body: 'Anything that writes, sends or spends waits for a different person to approve the exact action.',
+  },
+  {
+    kicker: 'Proof, not promises.',
+    body: 'Runs, guardrail decisions and approvals land in a hash-chained audit log you can export and check offline.',
+  },
 ];
 
-function Pipeline() {
+function Kickers() {
   return (
-    <section className={styles.section}>
-      <div className="container">
-        <Reveal className={styles.sectionHead}>
-          <p className={styles.eyebrow}>How it works</p>
-          <Heading as="h2" className={styles.h2}>
-            From a question to an approved, recorded action.
-          </Heading>
-        </Reveal>
-        <div className={styles.pipeline}>
-          {STEPS.map((s, i) => (
-            <Reveal key={s.n} delay={i * 110} className={styles.step}>
-              <span className={styles.stepNum}>{s.n}</span>
-              <Heading as="h3">{s.title}</Heading>
-              <p>{s.body}</p>
-            </Reveal>
-          ))}
-        </div>
+    <section className={styles.sectionTight}>
+      <div className={clsx('container', styles.kickers)}>
+        {KICKERS.map((k, i) => (
+          <Reveal key={k.kicker} delay={i * 90} className={styles.kicker}>
+            <p className={styles.kickerTitle}>{k.kicker}</p>
+            <p className={styles.kickerBody}>{k.body}</p>
+          </Reveal>
+        ))}
       </div>
     </section>
   );
 }
 
-type Tile = {title: string; body: string; tags?: string[]; size?: 'wide' | 'tall'; tone?: 'ink' | 'glow'};
+type Pillar = {
+  tab: string;
+  title: string;
+  body: string;
+  points: string[];
+  shot: string;
+  alt: string;
+  link: {label: string; to: string};
+};
 
-const TILES: Tile[] = [
+const PILLARS: Pillar[] = [
   {
-    title: 'Your models, your endpoints',
-    body: 'Connect any model you run, on an exact host allow-list. Cascade routers start small and escalate when a judge flags a weak answer, with cached tokens priced in.',
-    tags: ['vLLM', 'Ollama', 'OpenAI-compatible', 'AWS', 'Cascade routing', 'Prompt caching'],
-    size: 'wide',
-    tone: 'glow',
+    tab: 'Model choice',
+    title: 'Use the best model for each job, on your endpoints.',
+    body: 'Connect the models you already run and pick per task. Discover models automatically, set prices, and let routers start small and escalate only when an answer looks weak.',
+    points: [
+      'vLLM, Ollama, any OpenAI-compatible endpoint, or AWS-hosted models',
+      'Fabric and Gryvia presets with model discovery',
+      'An exact host allow-list: nothing reaches a host that is not on it',
+    ],
+    shot: '/17-settings.png',
+    alt: 'Nuvora settings with model endpoints and integrations',
+    link: {label: 'Connect a model', to: '/docs/getting-started/connect-a-model'},
   },
   {
-    title: 'Author is never approver',
-    body: 'Consequential steps wait for a different person, who sees the exact action and its fingerprint.',
-    size: 'tall',
-    tone: 'ink',
+    tab: 'Your data',
+    title: 'AI that knows your business, and who may see what.',
+    body: 'Upload documents or sync them from your systems. Hybrid retrieval returns the passages behind every answer, filtered by the groups each person belongs to.',
+    points: [
+      'Web, S3 and Confluence connectors with incremental sync',
+      'OCR for scans, audio transcription, typed extraction with review',
+      'Fine-tuning and distillation jobs sent to a trainer you run',
+    ],
+    shot: '/03-knowledge.png',
+    alt: 'Nuvora knowledge base with documents and content digests',
+    link: {label: 'Connectors', to: '/docs/operate/connectors'},
   },
   {
-    title: 'Guardrails as policy',
-    body: 'Word and regex filters, PII with checksum validation, contextual grounding and an optional classifier model.',
+    tab: 'Agents and workflows',
+    title: 'Agents that do real work, inside the lines.',
+    body: 'Give agents a closed set of tools: your OpenAPI actions, MCP servers and suite integrations. Chain steps in a visual builder with branches, reviews and handoffs.',
+    points: [
+      'OpenAPI import and remote MCP servers, registered by an admin',
+      'Session and long-term memory, with writes behind approval',
+      'Workflow steps for retrieval, extraction, images and Zyntra handoff',
+    ],
+    shot: '/15-workflow-builder.png',
+    alt: 'Nuvora workflow builder with retrieval, model and approval steps on a canvas',
+    link: {label: 'Agents and tools', to: '/docs/operate/agents-and-tools'},
   },
   {
-    title: 'Knowledge with access rules',
-    body: 'Web, S3 and Confluence connectors sync incrementally. Group rules from SSO decide who retrieves what.',
+    tab: 'Safety and guardrails',
+    title: 'One policy, applied to every input, output and tool call.',
+    body: 'Write guardrails once and they screen prompts, answers and tool arguments alike. When a classifier is unsure or unavailable, the request is blocked, not waved through.',
+    points: [
+      'Word and regex filters, PII detection with checksum validation',
+      'Grounding checks that score answers against retrieved sources',
+      'Exact-action approvals: different person, fingerprint, one-hour expiry',
+    ],
+    shot: '/08-guardrails.png',
+    alt: 'Nuvora guardrails page with filter, PII and grounding policies',
+    link: {label: 'Guardrails', to: '/docs/operate/guardrails'},
   },
   {
-    title: 'Agents with real tools',
-    body: 'Import OpenAPI actions, attach MCP servers, keep long-term memory, and trace every step in a waterfall.',
-    tags: ['OpenAPI', 'MCP', 'Memory', 'OTLP'],
+    tab: 'Cost control',
+    title: 'Spend where it matters, and see every token.',
+    body: 'Cascade routers try the cheapest capable model first. Caching, batch jobs and per-workspace budgets keep costs predictable, and the ledger shows what each run cost.',
+    points: [
+      'Cascade routers that escalate on weak or unsure answers',
+      'Prompt cache, with provider cached-token pricing tracked separately',
+      'Token budgets, concurrency caps and batch requests',
+    ],
+    shot: '/10-usage.png',
+    alt: 'Nuvora usage ledger with token spend and budgets per workspace',
+    link: {label: 'Routing', to: '/docs/operate/routing'},
   },
   {
-    title: 'Documents, images, audio',
-    body: 'OCR, transcription and vision in chat. Extraction blueprints turn documents into fields, with low-confidence review.',
-  },
-  {
-    title: 'Evaluate and experiment',
-    body: 'Grounded and LLM-judge evaluations, plus prompt experiments that compare variants on the same suite.',
-  },
-  {
-    title: 'Fine-tune and distill',
-    body: 'Validated datasets go to your own trainer for LoRA, QLoRA or distillation, and the result registers as a model.',
-  },
-  {
-    title: 'Image generation',
-    body: 'An images API and playground mode, with budgets, guardrails and expiring artifacts.',
-  },
-  {
-    title: 'Evidence and cost',
-    body: 'A usage ledger with budgets per workspace beside an audit chain you can export and verify offline.',
+    tab: 'Evaluate and prove',
+    title: 'Know it works before you ship. Prove it after.',
+    body: 'Evaluation suites score grounding and judge criteria per case, and prompt experiments compare variants on the same suite. Every run is traced and every decision recorded.',
+    points: [
+      'Assertions, LLM-judge and grounded cases, with reasons',
+      'Run waterfall with per-step timing and OpenTelemetry export',
+      'Hash-chained audit log, exportable and verifiable offline',
+    ],
+    shot: '/18-eval-case-editor.png',
+    alt: 'Nuvora evaluation case editor with grounded and judge criteria',
+    link: {label: 'Documents and evaluations', to: '/docs/operate/documents-and-evaluations'},
   },
 ];
 
-function Bento() {
+function CapabilityTour() {
+  const [active, setActive] = useState(0);
+  const p = PILLARS[active];
+  const src = useBaseUrl(p.shot);
   return (
     <section id="capabilities" className={clsx(styles.section, styles.sectionTint)}>
       <div className="container">
         <Reveal className={styles.sectionHead}>
-          <p className={styles.eyebrow}>Capabilities</p>
+          <p className={styles.eyebrow}>Meet Nuvora</p>
           <Heading as="h2" className={styles.h2}>
-            Everything an AI platform needs.
+            Everything you need to put AI in production.
             <br />
-            <span className={styles.muted}>Nothing that leaves your network.</span>
+            <span className={styles.muted}>In one platform you control.</span>
           </Heading>
         </Reveal>
-        <div className={styles.bento}>
-          {TILES.map((t, i) => (
-            <Reveal
-              key={t.title}
-              delay={(i % 3) * 80}
-              className={clsx(
-                styles.tile,
-                t.size === 'wide' && styles.tileWide,
-                t.size === 'tall' && styles.tileTall,
-                t.tone === 'ink' && styles.tileInk,
-                t.tone === 'glow' && styles.tileGlow,
-              )}>
-              <Heading as="h3">{t.title}</Heading>
-              <p>{t.body}</p>
-              {t.tags ? (
-                <div className={styles.tags}>
-                  {t.tags.map((tag) => (
-                    <span key={tag}>{tag}</span>
-                  ))}
-                </div>
-              ) : null}
+        <div className={styles.tabs} role="tablist" aria-label="Nuvora capabilities">
+          {PILLARS.map((pillar, i) => (
+            <button
+              key={pillar.tab}
+              type="button"
+              role="tab"
+              id={`cap-tab-${i}`}
+              aria-selected={i === active}
+              aria-controls="cap-panel"
+              className={clsx(styles.tab, i === active && styles.tabActive)}
+              onClick={() => setActive(i)}>
+              {pillar.tab}
+            </button>
+          ))}
+        </div>
+        <div id="cap-panel" role="tabpanel" aria-labelledby={`cap-tab-${active}`} className={styles.split}>
+          <div>
+            <Heading as="h3" className={styles.panelTitle}>
+              {p.title}
+            </Heading>
+            <p className={styles.panelBody}>{p.body}</p>
+            <ul className={styles.checksLight}>
+              {p.points.map((point) => (
+                <li key={point}>{point}</li>
+              ))}
+            </ul>
+            <Link className={styles.arrowLink} to={p.link.to}>
+              {p.link.label} →
+            </Link>
+          </div>
+          <div className={styles.tourFrame}>
+            <img key={p.shot} src={src} alt={p.alt} className={styles.tourImg} />
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+const LOOP = ['Plan', 'Call a tool', 'Policy check', 'Approve', 'Act', 'Record'];
+
+function Agents() {
+  const shot = useBaseUrl('/07-approvals.png');
+  return (
+    <section className={styles.section}>
+      <div className={clsx('container', styles.split)}>
+        <Reveal>
+          <p className={styles.eyebrow}>Agents</p>
+          <Heading as="h2" className={styles.h2}>
+            Take agents to production with full control.
+          </Heading>
+          <p className={styles.panelBody}>
+            Every step an agent takes is bounded, screened and on the record. The
+            moment it wants to change something real, a person signs off on the
+            exact action first.
+          </p>
+          <ol className={styles.loop} aria-label="Agent loop">
+            {LOOP.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
+          <ul className={styles.checksLight}>
+            <li>A closed tool registry and a fixed step limit. No shell, no open internet.</li>
+            <li>Code runs in a Keep sandbox with no network, only after a different person approves the exact code.</li>
+            <li>Durable jobs survive restarts. Work interrupted by a failed worker is flagged for review, not lost.</li>
+            <li>Every step timed in a run waterfall, exportable to your tracing stack.</li>
+          </ul>
+        </Reveal>
+        <Reveal delay={120} className={styles.tourFrame}>
+          <img src={shot} alt="Nuvora approvals queue showing a pending action with its fingerprint" className={styles.tourImg} loading="lazy" />
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+const USE_CASES = [
+  {glyph: '?', title: 'Ask your documents', body: 'Answers grounded in your policies, contracts and runbooks, with the source passage a click away.'},
+  {glyph: '✓', title: 'Assistants that act', body: 'Open the ticket, issue the refund, update the record, after the right person approves.'},
+  {glyph: '▤', title: 'Turn documents into data', body: 'Extract typed fields from forms and scans. Low-confidence results wait for a reviewer.'},
+  {glyph: '◐', title: 'Images and audio', body: 'Read scans with OCR, transcribe calls, reason over images in chat, and generate images.'},
+  {glyph: '⇄', title: 'Automate workflows', body: 'Chain retrieval, models, reviews and handoffs into flows that pause wherever a human should decide.'},
+  {glyph: '◎', title: 'Explain incidents', body: 'Ask why traffic dropped. Agents read Netra network evidence and cite it in the answer.'},
+];
+
+function UseCases() {
+  return (
+    <section className={clsx(styles.section, styles.sectionTint)}>
+      <div className="container">
+        <Reveal className={styles.sectionHead}>
+          <p className={styles.eyebrow}>Do more with Nuvora</p>
+          <Heading as="h2" className={styles.h2}>
+            From idea to production, fast.
+          </Heading>
+        </Reveal>
+        <div className={styles.useGrid}>
+          {USE_CASES.map((u, i) => (
+            <Reveal key={u.title} delay={(i % 3) * 80} className={styles.tile}>
+              <span className={styles.useGlyph} aria-hidden>
+                {u.glyph}
+              </span>
+              <Heading as="h3">{u.title}</Heading>
+              <p>{u.body}</p>
             </Reveal>
           ))}
         </div>
@@ -207,46 +346,52 @@ function Bento() {
   );
 }
 
-const TOUR = [
-  {id: 'playground', label: 'Playground', src: '/02-playground.png', caption: 'Ask, ground and verify: every answer next to its sources.'},
-  {id: 'builder', label: 'Workflow builder', src: '/15-workflow-builder.png', caption: 'Retrieval, model, tool and approval steps on one canvas.'},
-  {id: 'approvals', label: 'Approvals', src: '/07-approvals.png', caption: 'The exact action, its proposer, expiry and fingerprint.'},
-  {id: 'guardrails', label: 'Guardrails', src: '/08-guardrails.png', caption: 'Filters, PII and grounding checks, edited as policy.'},
-  {id: 'evidence', label: 'Evidence', src: '/09-evidence.png', caption: 'A hash-chained audit log you can export and verify.'},
-  {id: 'usage', label: 'Usage', src: '/10-usage.png', caption: 'Tokens, cost and cache savings per workspace.'},
+const COMPARE = [
+  ['Where it runs', 'The provider’s cloud regions', 'Your hardware, your cloud account, or fully air-gapped'],
+  ['Where prompts go', 'To the provider’s service', 'Only to hosts on an exact allow-list you control'],
+  ['Who approves an agent’s action', 'Whatever confirmation steps you configure', 'A different person, on the exact action, every time'],
+  ['What you can prove', 'Logs in the provider’s monitoring service', 'A hash-chained audit log you export and verify offline'],
+  ['Where agent code runs', 'A managed runtime in the provider’s cloud', 'A sandbox with no network, after approval'],
+  ['How model spend works', 'Metered by the provider', 'Your endpoints, with a ledger and budgets per workspace'],
 ];
 
-function Tour() {
-  const [active, setActive] = useState(0);
-  const shot = TOUR[active];
-  const src = useBaseUrl(shot.src);
+function Compare() {
   return (
     <section className={styles.section}>
       <div className="container">
         <Reveal className={styles.sectionHead}>
-          <p className={styles.eyebrow}>The console</p>
+          <p className={styles.eyebrow}>Why Nuvora</p>
           <Heading as="h2" className={styles.h2}>
-            A real product, not a mockup.
+            Everything a hosted AI platform does for you.
+            <br />
+            <span className={styles.muted}>On ground you own.</span>
           </Heading>
         </Reveal>
-        <div className={styles.tabs} role="tablist" aria-label="Console views">
-          {TOUR.map((t, i) => (
-            <button
-              key={t.id}
-              type="button"
-              role="tab"
-              aria-selected={i === active}
-              className={clsx(styles.tab, i === active && styles.tabActive)}
-              onClick={() => setActive(i)}>
-              {t.label}
-            </button>
-          ))}
-        </div>
-        <div className={styles.tourFrame} role="tabpanel">
-          <img key={shot.id} src={src} alt={shot.caption} className={styles.tourImg} />
-        </div>
-        <p className={styles.tourCaption}>
-          {shot.caption} <Link to="/gallery">See all views →</Link>
+        <Reveal className={styles.compareWrap}>
+          <table className={styles.compare}>
+            <thead>
+              <tr>
+                <th scope="col" aria-hidden />
+                <th scope="col">Typical hosted AI platform</th>
+                <th scope="col" className={styles.compareLead}>
+                  Nuvora
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {COMPARE.map(([label, hosted, ours]) => (
+                <tr key={label}>
+                  <th scope="row">{label}</th>
+                  <td>{hosted}</td>
+                  <td className={styles.compareLead}>{ours}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Reveal>
+        <p className={styles.compareNote}>
+          Hosted platforms bring managed model catalogs and regional compliance
+          programs. Nuvora brings control.
         </p>
       </div>
     </section>
@@ -267,62 +412,54 @@ reply = client.chat.completions.create(
 )
 print(reply.choices[0].message.content)`;
 
-function DropIn() {
-  return (
-    <section className={clsx(styles.section, styles.sectionInk)}>
-      <div className={clsx('container', styles.split)}>
-        <Reveal>
-          <p className={styles.eyebrow}>Drop-in API</p>
-          <Heading as="h2" className={styles.h2}>
-            Point your existing clients at Nuvora.
-          </Heading>
-          <p className={styles.inkLede}>
-            Chat, streaming and image endpoints speak the OpenAI wire format, so
-            SDKs and tools work unchanged. Behind them, every request passes
-            guardrails, routing, budgets and the audit chain.
-          </p>
-          <ul className={styles.checks}>
-            <li>Scoped service tokens per workspace</li>
-            <li>Token budgets and concurrency caps</li>
-            <li>Every call metered and recorded</li>
-          </ul>
-        </Reveal>
-        <Reveal delay={120} className={styles.code}>
-          <CodeBlock language="python" title="client.py">
-            {PY}
-          </CodeBlock>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
+const SH = `git clone ${REPO}.git && cd zyvor-nuvora
+export NUVORA_ADMIN_PASSWORD='choose-your-own-strong-password'
+python3 -m nuvora.server --demo     # http://127.0.0.1:8789
 
-const PAINS = [
-  ['You can’t send prompts or documents to a hosted AI vendor', 'Your own endpoints only, on an exact host allow-list'],
-  ['Answers sound right, but nobody can say where they came from', 'Cited passages with content digests on every grounded answer'],
-  ['An agent wants to send, write or spend', 'The step pauses until a different person approves the exact action'],
-  ['Audit asks what happened six weeks ago', 'A hash-chained audit log you can export and verify offline'],
-  ['Teams share a platform but not their data', 'Tenant-scoped storage, four roles, SSO groups and document access rules'],
-  ['Finance asks what AI costs', 'A usage ledger per workspace, with budgets and cache savings'],
-];
+# k3s on your own host, HTTPS with a generated admin password
+./scripts/deploy-remote.sh HOST USER`;
 
-function Pains() {
+function Quickstart() {
   return (
-    <section className={styles.section}>
+    <section id="quickstart" className={clsx(styles.section, styles.sectionInk)}>
       <div className="container">
         <Reveal className={styles.sectionHead}>
-          <p className={styles.eyebrow}>Why Nuvora</p>
+          <p className={styles.eyebrow}>Get started</p>
           <Heading as="h2" className={styles.h2}>
-            Built for the questions risk teams ask.
+            Running in minutes. Yours for good.
           </Heading>
+          <p className={styles.inkLede}>
+            Try it offline with Python 3.11 only, point it at a model you run, then
+            deploy for the team with Helm or k3s. Existing OpenAI clients work
+            unchanged, and every request passes guardrails, routing, budgets and the
+            audit chain.
+          </p>
         </Reveal>
-        <div className={styles.pains}>
-          {PAINS.map(([pain, answer], i) => (
-            <Reveal key={pain} delay={(i % 2) * 90} className={styles.pain}>
-              <p className={styles.painQ}>{pain}</p>
-              <p className={styles.painA}>{answer}</p>
-            </Reveal>
-          ))}
+        <div className={styles.codeGrid}>
+          <Reveal className={styles.code}>
+            <CodeBlock language="bash" title="Try it">
+              {SH}
+            </CodeBlock>
+          </Reveal>
+          <Reveal delay={120} className={styles.code}>
+            <CodeBlock language="python" title="client.py">
+              {PY}
+            </CodeBlock>
+          </Reveal>
+        </div>
+        <div className={styles.heroButtons}>
+          <Link className={styles.btnPrimary} to="/docs/getting-started/quickstart">
+            Quickstart
+          </Link>
+          <Link className={styles.btnGhost} to="/docs/getting-started/deploy">
+            Deploy guide
+          </Link>
+          <Link className={styles.btnGhost} to="/gallery">
+            Console tour
+          </Link>
+          <Link className={styles.btnGhost} to={REPO}>
+            GitHub
+          </Link>
         </div>
       </div>
     </section>
@@ -336,30 +473,21 @@ function Closing() {
       <div className="container">
         <Reveal className={styles.closingInner}>
           <Heading as="h2" className={styles.closingTitle}>
-            Run it on your laptop in a minute.
+            Put AI to work.
             <br />
-            <span className={styles.gradientText}>Run it on your cluster in one command.</span>
+            <span className={styles.gradientText}>Keep it under control.</span>
           </Heading>
-          <div className={styles.closingCode}>
-            <code>./scripts/deploy-remote.sh HOST USER</code>
-          </div>
           <p className={styles.closingNote}>
-            Builds on the host, imports into k3s and serves HTTPS with a generated
-            admin password. SQLite on one node, PostgreSQL across replicas.
+            See Nuvora on your models and your documents, with a second person
+            signing off on every agent action.
           </p>
-          <div className={styles.heroButtons}>
-            <Link className={styles.btnPrimary} to="/docs/getting-started/deploy">
-              Deploy guide
-            </Link>
-            <Link className={styles.btnGhost} to="/docs/security">
-              Security model
-            </Link>
-          </div>
+          <SalesButtons campaign="pages_closing" />
           <p className={styles.license}>
-            Zyvor Production License v1.0: free for evaluation, development and
-            other non-production use; production needs a commercial license. The
-            capability matrix in the repository says exactly what is and isn’t
-            built.
+            0.3.0 is an evaluation release. Zyvor Production License v1.0: free for
+            evaluation, development and other non-production use; production needs a
+            commercial license. The{' '}
+            <Link to={`${REPO}/blob/main/docs/CAPABILITIES.md`}>capability matrix</Link>{' '}
+            says exactly what is and isn’t built.
           </p>
         </Reveal>
       </div>
@@ -370,15 +498,16 @@ function Closing() {
 export default function Home(): ReactNode {
   return (
     <Layout
-      title="Nuvora: private AI that shows its work"
-      description="A self-hosted AI application platform: your own model endpoints, cited retrieval, tool-using agents, guardrails, separate-human approvals and hash-chained evidence.">
+      title="Nuvora: the AI platform you run"
+      description="The self-hosted AI platform for assistants, agents and workflows: your models, cited answers, guardrails, human approvals and a verifiable audit trail, on infrastructure you control.">
       <Hero />
       <main>
-        <Pipeline />
-        <Bento />
-        <Tour />
-        <DropIn />
-        <Pains />
+        <Kickers />
+        <CapabilityTour />
+        <Agents />
+        <UseCases />
+        <Compare />
+        <Quickstart />
         <Closing />
       </main>
     </Layout>
