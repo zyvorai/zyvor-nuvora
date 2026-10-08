@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 """Operator-configured providers; no unrestricted URL tools."""
 import base64
+import hashlib
 import json
+import math
 import os
 import re
 import secrets
@@ -82,11 +84,31 @@ def images_of(content):
     return out
 
 
+def parse_arguments(raw):
+    """The JSON object in a tool call's arguments string; {} when it is not one."""
+    try:
+        value=json.loads(raw) if isinstance(raw,str) and raw.strip() else raw
+    except ValueError:
+        return {}
+    return value if isinstance(value,dict) else {}
+
+
+def tool_names(messages):
+    """{tool_call_id: function name} for the assistant tool calls in a conversation."""
+    return {c.get('id'):(c.get('function') or {}).get('name','') for m in messages for c in m.get('tool_calls') or [] if isinstance(c,dict)}
+
+
 def ollama_messages(messages):
     out=[]
+    names=tool_names(messages)
     for m in messages:
         images=images_of(m.get('content'))
-        out.append({'role':m['role'],'content':text_of(m.get('content')),**({'images':[b for _,b in images]} if images else {})})
+        item={'role':m['role'],'content':text_of(m.get('content')),**({'images':[b for _,b in images]} if images else {})}
+        if m.get('tool_calls'):
+            item['tool_calls']=[{'function':{'name':(c.get('function') or {}).get('name',''),'arguments':parse_arguments((c.get('function') or {}).get('arguments'))}} for c in m['tool_calls']]
+        if m['role']=='tool' and names.get(m.get('tool_call_id')):
+            item['tool_name']=names[m['tool_call_id']]
+        out.append(item)
     return out
 
 
@@ -94,11 +116,113 @@ def aws_messages(messages):
     system=[{'text':text_of(m['content'])} for m in messages if m['role']=='system']
     history=[]
     for m in messages:
+        if m['role']=='tool':
+            block={'toolResult':{'toolUseId':str(m.get('tool_call_id','')),'content':[{'text':text_of(m['content']) or ' '}]}}
+            if history and history[-1]['role']=='user' and all('toolResult' in b for b in history[-1]['content']):
+                history[-1]['content'].append(block)
+            else:
+                history.append({'role':'user','content':[block]})
+            continue
         if m['role'] not in ('user','assistant'):
             continue
-        blocks=[{'text':text_of(m['content'])}]+[{'image':{'format':mime.split('/')[1],'source':{'bytes':base64.b64decode(b)}}} for mime,b in images_of(m['content'])]
+        calls=m.get('tool_calls') or []
+        text=text_of(m['content'])
+        blocks=([{'text':text}] if text or not calls else [])+[{'image':{'format':mime.split('/')[1],'source':{'bytes':base64.b64decode(b)}}} for mime,b in images_of(m['content'])]
+        blocks+=[{'toolUse':{'toolUseId':c.get('id',''),'name':(c.get('function') or {}).get('name',''),'input':parse_arguments((c.get('function') or {}).get('arguments'))}} for c in calls]
         history.append({'role':m['role'],'content':blocks})
     return system,history
+
+
+def aws_tool_config(tools,choice):
+    """Converse toolConfig for OpenAI-style tools and tool_choice."""
+    config={'tools':[{'toolSpec':{'name':t['function']['name'],**({'description':t['function']['description']} if t['function'].get('description') else {}),
+                                  'inputSchema':{'json':t['function'].get('parameters') or {'type':'object','properties':{}}}}} for t in tools]}
+    if choice=='required':
+        config['toolChoice']={'any':{}}
+    elif isinstance(choice,dict):
+        config['toolChoice']={'tool':{'name':choice['function']['name']}}
+    return config
+
+
+def converse_to_openai(message):
+    """(text, tool_calls) from a Converse output message: toolUse blocks become OpenAI tool calls."""
+    text=''.join(b.get('text','') for b in message.get('content') or [])
+    calls=[{'id':b['toolUse']['toolUseId'],'type':'function','function':{'name':b['toolUse']['name'],'arguments':json.dumps(b['toolUse'].get('input') or {})}}
+           for b in message.get('content') or [] if 'toolUse' in b]
+    return text,calls
+
+
+SUPPORTED={'demo':{'tools','tool_choice','top_p','stop','response_format'},
+           'openai':{'tools','tool_choice','top_p','stop','response_format'},
+           'ollama':{'tools','top_p','stop','response_format'},
+           'aws':{'tools','tool_choice','top_p','stop'}}
+
+
+def check_support(model,tools,opts):
+    """Refuse (422, naming the parameter) what the model's provider cannot do; never ignore it."""
+    kind=model.get('provider')
+    allowed=SUPPORTED.get(kind,set())
+    opts=opts or {}
+    wanted=(['tools'] if tools else [])+[k for k in ('tool_choice','top_p','stop','response_format') if opts.get(k) is not None]
+    for key in wanted:
+        if key=='tool_choice' and opts[key] in ('auto','none'):
+            continue
+        if key not in allowed:
+            raise Fault(f"Model {model.get('name',model.get('id',''))} ({kind} provider) does not support {key}",422)
+
+
+def demo_value(schema,hint='demo'):
+    """A deterministic value that satisfies a (simple) JSON schema, for the offline demo provider."""
+    if not isinstance(schema,dict):
+        return hint
+    if schema.get('enum'):
+        return schema['enum'][0]
+    kind=schema.get('type')
+    if isinstance(kind,list):
+        kind=next((k for k in kind if k!='null'),'string')
+    if kind=='object' or (kind is None and 'properties' in schema):
+        return {k:demo_value(v,k) for k,v in (schema.get('properties') or {}).items()}
+    if kind=='array':
+        return [demo_value(schema.get('items') or {},hint)]
+    if kind=='integer':
+        return 1
+    if kind=='number':
+        return 1.5
+    if kind=='boolean':
+        return True
+    if kind=='null':
+        return None
+    return hint
+
+
+def demo_embedding(text,dim=64):
+    """A deterministic unit vector from hashed words; similar texts share dimensions. Not semantic."""
+    out=[0.0]*dim
+    for word in re.findall(r'\w+',text.lower()) or [text]:
+        digest=hashlib.sha256(word.encode()).digest()
+        out[int.from_bytes(digest[:2],'big')%dim]+=1 if digest[2]%2 else -1
+    norm=math.sqrt(sum(v*v for v in out)) or 1
+    return [round(v/norm,8) for v in out]
+
+
+def stop_at(text,stop):
+    cut=min([i for i in (text.find(s) for s in stop or []) if i>=0],default=len(text))
+    return text[:cut]
+
+
+class ToolCallAssembler:
+    """Joins streamed tool-call fragments (by index) into complete OpenAI tool calls."""
+    def __init__(self):
+        self.calls={}
+
+    def add(self,index,call_id=None,name=None,arguments=None):
+        call=self.calls.setdefault(index,{'id':'','name':'','arguments':''})
+        call['id']=call_id or call['id']
+        call['name']=name or call['name']
+        call['arguments']+=arguments or ''
+
+    def result(self):
+        return [{'id':c['id'] or 'call_'+secrets.token_hex(8),'type':'function','function':{'name':c['name'],'arguments':c['arguments'] or '{}'}} for _,c in sorted(self.calls.items())]
 
 
 def multipart(fields,files):
@@ -139,28 +263,43 @@ class Providers:
         if model.get('key_env') and not model['key_env'].startswith('NUVORA_SECRET_'):
             raise Fault('Secrets must use a NUVORA_SECRET_ environment reference')
 
-    def chat(self,model,messages,tools=None,max_tokens=1024,temperature=.2):
+    def chat(self,model,messages,tools=None,max_tokens=1024,temperature=.2,opts=None):
+        """opts: top_p, stop (list), tool_choice, response_format; anything the provider cannot honour is a 422."""
         self.validate(model)
+        opts=opts or {}
+        check_support(model,tools,opts)
         kind=model['provider']
+        choice=opts.get('tool_choice')
+        if choice=='none':
+            tools=None
         if kind=='demo':
             last=messages[-1]
             text=text_of(last.get('content',''))+(' [image attached]' if images_of(last.get('content')) else '')
             if tools and not any(m.get('role')=='tool' for m in messages):
-                name=tools[0]['function']['name']
-                args={'query':text} if name=='knowledge_search' else {}
+                pick=next((t for t in tools if isinstance(choice,dict) and t['function']['name']==choice['function']['name']),tools[0])
+                name=pick['function']['name']
+                params=pick['function'].get('parameters') or {}
+                args={'query':text} if name=='knowledge_search' else {k:text if k=='query' else demo_value((params.get('properties') or {}).get(k),k) for k in params.get('required') or []}
                 return {'content':'','tool_calls':[{'id':'demo-call','type':'function','function':{'name':name,'arguments':json.dumps(args)}}],'usage':{'prompt_tokens':len(text)//4+1,'completion_tokens':10},'evidence_class':'synthetic'}
-            return {'content':'[OFFLINE DEMO — no model inference] '+text[:1800],'tool_calls':[],'usage':{'prompt_tokens':sum(len(str(m)) for m in messages)//4+1,'completion_tokens':len(text)//4+12},'evidence_class':'synthetic'}
+            fmt=opts.get('response_format')
+            if fmt and fmt['type']=='json_object':
+                content=json.dumps({'response':text[:200]})
+            elif fmt:
+                content=json.dumps(demo_value(fmt['json_schema'].get('schema')))
+            else:
+                content='[OFFLINE DEMO — no model inference] '+text[:1800]
+            if opts.get('stop'):
+                content=stop_at(content,opts['stop'])
+            return {'content':content,'tool_calls':[],'usage':{'prompt_tokens':sum(len(str(m)) for m in messages)//4+1,'completion_tokens':len(text)//4+12},'evidence_class':'synthetic'}
         if kind=='aws':
-            if tools:
-                raise Fault('AWS tool calling is not supported in this release; use an OpenAI-compatible agent model',422)
             client=self._aws_client(model)
-            system,history=aws_messages(messages)
             try:
-                raw=client.converse(modelId=model['upstream_model'],messages=history,system=system,inferenceConfig={'maxTokens':max_tokens,'temperature':temperature})
+                raw=client.converse(**self._aws_args(model,messages,tools,max_tokens,temperature,opts))
             except Exception as exc:
                 raise Fault('AWS model invocation failed',502) from exc
             usage=raw.get('usage',{})
-            return {'content':''.join(c.get('text','') for c in raw['output']['message']['content']),'tool_calls':[],'usage':{'prompt_tokens':usage.get('inputTokens',0),'completion_tokens':usage.get('outputTokens',0)},'evidence_class':'provider'}
+            text,calls=converse_to_openai(raw['output']['message'])
+            return {'content':text,'tool_calls':calls,'usage':{'prompt_tokens':usage.get('inputTokens',0),'completion_tokens':usage.get('outputTokens',0)},'evidence_class':'provider'}
         url=model['base_url'].rstrip('/')
         headers={}
         if model.get('key_env'):
@@ -169,16 +308,45 @@ class Providers:
                 raise Fault('Provider credential is not configured',503)
             headers['Authorization']='Bearer '+key
         if kind=='ollama':
-            if tools:
-                raise Fault('Use Ollama’s OpenAI-compatible /v1 endpoint for agent tool calling',422)
-            raw=post_json(url+'/api/chat',{'model':model['upstream_model'],'messages':ollama_messages(messages),'stream':False,'options':{'num_predict':max_tokens,'temperature':temperature}},headers,self.allowed_hosts)
-            return {'content':raw['message']['content'],'tool_calls':[],'usage':{'prompt_tokens':raw.get('prompt_eval_count',0),'completion_tokens':raw.get('eval_count',0)},'evidence_class':'provider'}
-        body={'model':model['upstream_model'],'messages':messages,'max_tokens':max_tokens,'temperature':temperature,'stream':False}
-        if tools:
-            body['tools']=tools
-        raw=post_json(url+'/chat/completions',body,headers,self.allowed_hosts)
+            raw=post_json(url+'/api/chat',self._ollama_body(model,messages,tools,max_tokens,temperature,opts,False),headers,self.allowed_hosts)
+            message=raw['message']
+            calls=[{'id':'call_'+secrets.token_hex(8),'type':'function','function':{'name':c['function']['name'],'arguments':json.dumps(c['function'].get('arguments') or {})}} for c in message.get('tool_calls') or []]
+            return {'content':message.get('content') or '','tool_calls':calls,'usage':{'prompt_tokens':raw.get('prompt_eval_count',0),'completion_tokens':raw.get('eval_count',0)},'evidence_class':'provider'}
+        raw=post_json(url+'/chat/completions',self._openai_body(model,messages,tools,max_tokens,temperature,opts,False),headers,self.allowed_hosts)
         msg=raw['choices'][0]['message']
         return {'content':msg.get('content') or '', 'tool_calls':msg.get('tool_calls') or [],'usage':raw.get('usage',{}),'evidence_class':'provider'}
+
+    @staticmethod
+    def _openai_body(model,messages,tools,max_tokens,temperature,opts,stream):
+        body={'model':model['upstream_model'],'messages':messages,'max_tokens':max_tokens,'temperature':temperature,'stream':stream}
+        if stream:
+            body['stream_options']={'include_usage':True}
+        if tools:
+            body['tools']=tools
+        for key in ('tool_choice','top_p','stop','response_format'):
+            if opts.get(key) is not None and (key!='tool_choice' or tools):
+                body[key]=opts[key]
+        return body
+
+    @staticmethod
+    def _ollama_body(model,messages,tools,max_tokens,temperature,opts,stream):
+        options={'num_predict':max_tokens,'temperature':temperature,**({'top_p':opts['top_p']} if opts.get('top_p') is not None else {}),**({'stop':opts['stop']} if opts.get('stop') else {})}
+        body={'model':model['upstream_model'],'messages':ollama_messages(messages),'stream':stream,'options':options}
+        if tools:
+            body['tools']=tools
+        fmt=opts.get('response_format')
+        if fmt:
+            body['format']='json' if fmt['type']=='json_object' else fmt['json_schema']['schema']
+        return body
+
+    @staticmethod
+    def _aws_args(model,messages,tools,max_tokens,temperature,opts):
+        system,history=aws_messages(messages)
+        config={'maxTokens':max_tokens,'temperature':temperature,**({'topP':opts['top_p']} if opts.get('top_p') is not None else {}),**({'stopSequences':opts['stop']} if opts.get('stop') else {})}
+        args={'modelId':model['upstream_model'],'messages':history,'system':system,'inferenceConfig':config}
+        if tools:
+            args['toolConfig']=aws_tool_config(tools,opts.get('tool_choice'))
+        return args
 
     def _auth(self,model):
         headers={}
@@ -189,28 +357,36 @@ class Providers:
             headers['Authorization']='Bearer '+key
         return headers
 
-    def stream(self,model,messages,max_tokens=1024,temperature=.2):
-        """Yield {'delta': text} pieces, then {'usage': {...}, 'evidence_class': ...}."""
+    def stream(self,model,messages,max_tokens=1024,temperature=.2,tools=None,opts=None):
+        """Yield {'delta': text} pieces, then one {'tool_calls': [...]} if the model called tools,
+        then {'usage': {...}, 'evidence_class': ...}."""
         self.validate(model)
+        opts=opts or {}
+        check_support(model,tools,opts)
         kind=model['provider']
+        if opts.get('tool_choice')=='none':
+            tools=None
         if kind=='aws':
-            yield from self._aws_stream(model,messages,max_tokens,temperature)
+            yield from self._aws_stream(model,messages,max_tokens,temperature,tools,opts)
             return
         if kind=='demo':
-            result=self.chat(model,messages,None,max_tokens,temperature)
+            result=self.chat(model,messages,tools,max_tokens,temperature,opts)
             words=result['content'].split(' ')
-            pause=min(.03,1.2/max(1,len(words))) if kind=='demo' else 0
+            pause=min(.03,1.2/max(1,len(words)))
             for i,word in enumerate(words):
                 yield {'delta':(' ' if i else '')+word}
                 if pause:
                     time.sleep(pause)
+            if result['tool_calls']:
+                yield {'tool_calls':result['tool_calls']}
             yield {'usage':result['usage'],'evidence_class':result['evidence_class']}
             return
         url=model['base_url'].rstrip('/')
         headers=self._auth(model)
         usage={}
+        assembler=ToolCallAssembler()
         if kind=='ollama':
-            body={'model':model['upstream_model'],'messages':ollama_messages(messages),'stream':True,'options':{'num_predict':max_tokens,'temperature':temperature}}
+            body=self._ollama_body(model,messages,tools,max_tokens,temperature,opts,True)
             for line in stream_lines(url+'/api/chat',body,headers,self.allowed_hosts):
                 try:
                     chunk=json.loads(line)
@@ -219,11 +395,15 @@ class Providers:
                 text=chunk.get('message',{}).get('content','')
                 if text:
                     yield {'delta':text}
+                for call in chunk.get('message',{}).get('tool_calls') or []:
+                    assembler.add(len(assembler.calls),None,call['function']['name'],json.dumps(call['function'].get('arguments') or {}))
                 if chunk.get('done'):
                     usage={'prompt_tokens':chunk.get('prompt_eval_count',0),'completion_tokens':chunk.get('eval_count',0)}
+            if assembler.calls:
+                yield {'tool_calls':assembler.result()}
             yield {'usage':usage,'evidence_class':'provider'}
             return
-        body={'model':model['upstream_model'],'messages':messages,'max_tokens':max_tokens,'temperature':temperature,'stream':True,'stream_options':{'include_usage':True}}
+        body=self._openai_body(model,messages,tools,max_tokens,temperature,opts,True)
         for line in stream_lines(url+'/chat/completions',body,headers,self.allowed_hosts):
             if not line.startswith('data:'):
                 continue
@@ -237,9 +417,15 @@ class Providers:
             if chunk.get('usage'):
                 usage=chunk['usage']
             for choice in chunk.get('choices') or []:
-                text=(choice.get('delta') or {}).get('content')
+                delta=choice.get('delta') or {}
+                text=delta.get('content')
                 if text:
                     yield {'delta':text}
+                for call in delta.get('tool_calls') or []:
+                    function=call.get('function') or {}
+                    assembler.add(call.get('index',0),call.get('id'),function.get('name'),function.get('arguments'))
+        if assembler.calls:
+            yield {'tool_calls':assembler.result()}
         yield {'usage':usage,'evidence_class':'provider'}
 
     def _aws_client(self,model):
@@ -249,19 +435,25 @@ class Providers:
             raise Fault('Install nuvora[aws] for the AWS provider',503) from exc
         return boto3.client('bedrock-runtime',region_name=model.get('region','us-east-1'))
 
-    def _aws_stream(self,model,messages,max_tokens,temperature):
+    def _aws_stream(self,model,messages,max_tokens,temperature,tools=None,opts=None):
         client=self._aws_client(model)
-        system,history=aws_messages(messages)
         try:
-            raw=client.converse_stream(modelId=model['upstream_model'],messages=history,system=system,inferenceConfig={'maxTokens':max_tokens,'temperature':temperature})
+            raw=client.converse_stream(**self._aws_args(model,messages,tools,max_tokens,temperature,opts or {}))
         except Exception as exc:
             raise Fault('AWS model invocation failed',502) from exc
         usage={}
+        assembler=ToolCallAssembler()
         try:
             for event in raw['stream']:
                 text=event.get('contentBlockDelta',{}).get('delta',{}).get('text')
                 if text:
                     yield {'delta':text}
+                started=event.get('contentBlockStart',{}).get('start',{}).get('toolUse')
+                if started:
+                    assembler.add(event['contentBlockStart'].get('contentBlockIndex',0),started.get('toolUseId'),started.get('name'))
+                piece=event.get('contentBlockDelta',{}).get('delta',{}).get('toolUse')
+                if piece:
+                    assembler.add(event['contentBlockDelta'].get('contentBlockIndex',0),arguments=piece.get('input'))
                 if 'metadata' in event:
                     u=event['metadata'].get('usage',{})
                     usage={'prompt_tokens':u.get('inputTokens',0),'completion_tokens':u.get('outputTokens',0)}
@@ -272,6 +464,8 @@ class Providers:
             raise
         except Exception as exc:
             raise Fault('AWS model stream failed',502) from exc
+        if assembler.calls:
+            yield {'tool_calls':assembler.result()}
         yield {'usage':usage,'evidence_class':'provider'}
 
     def image(self,model,prompt,n,size):
@@ -318,9 +512,11 @@ class Providers:
         return raw['text']
 
     def embed(self,model,texts):
-        if model['provider'] not in ('openai','ollama'):
+        if model['provider'] not in ('demo','openai','ollama'):
             raise Fault('Embedding models require an OpenAI-compatible or Ollama provider')
         self.validate(model)
+        if model['provider']=='demo':
+            return [demo_embedding(t) for t in texts]
         if model['provider']=='ollama':
             raw=post_json(model['base_url'].rstrip('/')+'/api/embed',{'model':model['upstream_model'],'input':texts},self._auth(model),self.allowed_hosts)
             vectors=raw.get('embeddings') or []

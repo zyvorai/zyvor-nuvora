@@ -4,14 +4,16 @@ import hashlib
 import json
 import math
 import re
+import base64
 import secrets
+import struct
 import threading
 import traceback
 import os
 import time
 from .store import canonical
 from .security import CLASSIFIER_CATEGORIES, Fault, guard, require, validate_policy
-from .providers import DATA_IMAGE, Providers, text_of
+from .providers import DATA_IMAGE, Providers, check_support, text_of
 from .retrieval import chunks, search
 from . import actions, connectors, datasets, mcp_client, pagination, telemetry
 from . import ingest as parsers
@@ -31,6 +33,71 @@ TOOLS={
  'memory_write':{'description':'Propose a durable session memory update; requires human approval','parameters':{'type':'object','properties':{'text':{'type':'string'}},'required':['text'],'additionalProperties':False}}
 }
 ALL_TOOLS={**TOOLS,**INTEGRATION_TOOLS}
+TOOL_NAME=re.compile(r'[A-Za-z0-9_-]{1,64}')
+CALL_NAME=re.compile(r'[\w.:-]{1,128}')
+
+
+def request_options(body):
+    """Validate and normalise tools, tool_choice, response_format, top_p and stop from a chat request.
+    Returns (tools or None, opts); opts holds only what the caller set."""
+    tools=body.get('tools')
+    if tools is not None:
+        if not isinstance(tools,list) or not 1<=len(tools)<=64:
+            raise Fault('tools must contain 1–64 function definitions')
+        clean=[]
+        for tool in tools:
+            function=tool.get('function') if isinstance(tool,dict) else None
+            if not isinstance(tool,dict) or set(tool)-{'type','function'} or tool.get('type')!='function' or not isinstance(function,dict) or set(function)-{'name','description','parameters'}:
+                raise Fault('Each tool must be {"type":"function","function":{name, description, parameters}}')
+            if not isinstance(function.get('name'),str) or not TOOL_NAME.fullmatch(function['name']):
+                raise Fault('Tool names use letters, digits, _ and - (1–64 characters)')
+            if not isinstance(function.get('description',''),str) or len(function.get('description',''))>2000:
+                raise Fault('Tool descriptions are at most 2000 characters')
+            parameters=function.get('parameters')
+            if parameters is not None and (not isinstance(parameters,dict) or len(canonical(parameters))>20000):
+                raise Fault('Tool parameters must be a JSON schema object of at most 20000 characters')
+            clean.append({'type':'function','function':{k:function[k] for k in ('name','description','parameters') if function.get(k) not in (None,'')}})
+        if len({t['function']['name'] for t in clean})!=len(clean):
+            raise Fault('Tool names must be unique')
+        tools=clean
+    opts={}
+    choice=body.get('tool_choice')
+    if choice is not None:
+        if tools is None:
+            raise Fault('tool_choice requires tools')
+        if isinstance(choice,dict):
+            name=(choice.get('function') or {}).get('name') if choice.get('type')=='function' and isinstance(choice.get('function'),dict) else None
+            if name not in {t['function']['name'] for t in tools}:
+                raise Fault('tool_choice must name one of the supplied tools')
+            choice={'type':'function','function':{'name':name}}
+        elif choice not in ('auto','none','required'):
+            raise Fault('tool_choice must be auto, none, required or a named function')
+        opts['tool_choice']=choice
+    fmt=body.get('response_format')
+    if fmt is not None:
+        kind=fmt.get('type') if isinstance(fmt,dict) else None
+        if kind not in ('text','json_object','json_schema'):
+            raise Fault('response_format.type must be text, json_object or json_schema')
+        if kind=='json_object':
+            opts['response_format']={'type':'json_object'}
+        elif kind=='json_schema':
+            spec=fmt.get('json_schema')
+            if not isinstance(spec,dict) or not isinstance(spec.get('schema'),dict) or len(canonical(spec['schema']))>20000 \
+                    or not isinstance(spec.get('name'),str) or not TOOL_NAME.fullmatch(spec['name']) or not isinstance(spec.get('strict',False),bool):
+                raise Fault('response_format.json_schema needs a name and a schema object of at most 20000 characters')
+            opts['response_format']={'type':'json_schema','json_schema':{k:spec[k] for k in ('name','schema','strict') if k in spec}}
+    top_p=body.get('top_p')
+    if top_p is not None:
+        if isinstance(top_p,bool) or not isinstance(top_p,(int,float)) or not 0<top_p<=1:
+            raise Fault('top_p must be a number above 0 and at most 1')
+        opts['top_p']=top_p
+    stop=body.get('stop')
+    if stop is not None:
+        stop=[stop] if isinstance(stop,str) else stop
+        if not isinstance(stop,list) or not 1<=len(stop)<=4 or any(not isinstance(x,str) or not 1<=len(x)<=100 for x in stop):
+            raise Fault('stop must be a string or up to 4 strings of 1–100 characters')
+        opts['stop']=stop
+    return tools,opts
 
 
 def validate_metadata(metadata):
@@ -790,7 +857,7 @@ class Platform:
             final=i==len(tiers)-1
             if final and last_streams:
                 return None
-            result=self.providers.chat(model,ctx['messages'],tools,ctx['max_tokens'],ctx['temperature'])
+            result=self.providers.chat(model,ctx['messages'],tools,ctx['max_tokens'],ctx['temperature'],*([ctx['opts']] if ctx['opts'] else []))
             reason='' if final else self.escalation(p,ctx['router'],ctx['messages'],result)
             if not reason:
                 return result
@@ -838,10 +905,21 @@ class Platform:
         cleaned=[]
         policy=self.policy(p)
         images=0
+        request_tools,opts=request_options(body)
+        if tools is None:
+            tools=request_tools
+        elif request_tools:
+            raise Fault('tools are not accepted on this request')
         for msg in messages:
             if not isinstance(msg,dict) or msg.get('role') not in ('system','user','assistant','tool'):
                 raise Fault('Invalid message')
             content=msg.get('content','')
+            extra={}
+            if msg.get('tool_calls') is not None:
+                extra['tool_calls']=self._clean_calls(p,msg,policy)
+                content='' if content is None else content
+            if msg['role']=='tool' and (not isinstance(msg.get('tool_call_id'),str) or not 1<=len(msg['tool_call_id'])<=200):
+                raise Fault('Tool messages need a tool_call_id')
             if isinstance(content,list):
                 if msg['role']!='user' or not 1<=len(content)<=20:
                     raise Fault('Content parts are only accepted on user messages (1–20 parts)')
@@ -857,9 +935,9 @@ class Platform:
                         parts.append({'type':'image_url','image_url':{'url':part['image_url']['url']}})
                     else:
                         raise Fault('Content parts must be text or base64 data: URL images (PNG, JPEG, WebP)')
-                cleaned.append({**msg,'content':parts})
+                cleaned.append({**msg,'content':parts,**extra})
             elif isinstance(content,str):
-                cleaned.append({**msg,'content':self._guard_input(p,content,policy)})
+                cleaned.append({**msg,'content':self._guard_input(p,content,policy),**extra})
             else:
                 raise Fault('Invalid message')
         if images>4:
@@ -881,12 +959,14 @@ class Platform:
             blind=[t['name'] for t in tiers if not t.get('vision') and t['provider']!='demo']
             if blind:
                 raise Fault('Images need a model with vision enabled: '+', '.join(blind),422)
+        for tier in tiers:
+            check_support(tier,tools,opts)
         model=tiers[0]
         maximum=body.get('max_tokens',1024)
         temperature=body.get('temperature',.2)
         if not isinstance(maximum,int) or not 1<=maximum<=8192 or not isinstance(temperature,(int,float)) or not 0<=temperature<=2:
             raise Fault('Invalid generation settings')
-        fingerprint=hashlib.sha256(canonical({'model':model,'router':router,'messages':cleaned,'max_tokens':maximum,'temperature':temperature,'tools':tools,'policy':policy}).encode()).hexdigest()
+        fingerprint=hashlib.sha256(canonical({'model':model,'router':router,'messages':cleaned,'max_tokens':maximum,'temperature':temperature,'tools':tools,'opts':opts,'policy':policy}).encode()).hexdigest()
         use_cache=body.get('cache',False) and not tools and temperature==0
         now=time.time()
         with self.billing_lock, self.store.lock:
@@ -895,7 +975,7 @@ class Platform:
                 raise Fault('Concurrent request limit reached',429)
             used=self.store.db.execute('SELECT COALESCE(SUM(input_tokens+output_tokens),0) FROM usage WHERE tenant=? AND created>?',(p['tenant'],now-86400)).fetchone()[0]
             reserved=sum(v for k,v in getattr(self,'reservations',{}).items() if k[0]==p['tenant'])
-            estimate=(sum(len(canonical({**m,'content':text_of(m['content'])})) for m in cleaned)//3+1000*images+maximum)*len(tiers)
+            estimate=(sum(len(canonical({**m,'content':text_of(m['content'])})) for m in cleaned)//3+1000*images+maximum+len(canonical(tools or []))//3+len(canonical(opts))//3)*len(tiers)
             limit=policy.get('daily_tokens',1000000)
             if used+reserved+estimate>limit:
                 raise Fault('Tenant daily token budget exhausted',429)
@@ -907,8 +987,23 @@ class Platform:
             cached=self.store.db.execute('SELECT value FROM cache WHERE tenant=? AND key=? AND expires>?',(p['tenant'],fingerprint,now)).fetchone() if use_cache else None
         return {'model':model,'messages':cleaned,'max_tokens':maximum,'temperature':temperature,'policy':policy,'fingerprint':fingerprint,
                 'use_cache':use_cache,'key':key,'reservation':reservation,'estimate':estimate,'cached':cached,'start':time.monotonic(),'sources':sources,
-                'tiers':tiers,'router':router,'escalations':[],
+                'tiers':tiers,'router':router,'escalations':[],'tools':tools,'opts':opts,
                 'routing':'router '+router['name'] if router else 'lowest configured price' if requested=='auto' else 'explicit'}
+
+    def _clean_calls(self,p,msg,policy):
+        """Validate an assistant message's tool_calls; their arguments pass the input guardrail."""
+        calls=msg['tool_calls']
+        if msg['role']!='assistant' or not isinstance(calls,list) or not 1<=len(calls)<=20:
+            raise Fault('tool_calls are 1–20 calls on an assistant message')
+        out=[]
+        for call in calls:
+            function=call.get('function') if isinstance(call,dict) else None
+            if not isinstance(function,dict) or not isinstance(call.get('id'),str) or not 1<=len(call['id'])<=200 \
+                    or not isinstance(function.get('name'),str) or not CALL_NAME.fullmatch(function['name']) \
+                    or not isinstance(function.get('arguments','{}'),str) or len(function.get('arguments','{}'))>20000:
+                raise Fault('Invalid tool call')
+            out.append({'id':call['id'],'type':'function','function':{'name':function['name'],'arguments':self._guard_input(p,function.get('arguments') or '{}',policy)}})
+        return out
 
     def _guard_input(self,p,text,policy):
         verdict=guard(text,policy)
@@ -948,7 +1043,7 @@ class Platform:
     def chat(self,p,body,tools=None):
         ctx=self._begin(p,body,tools)
         try:
-            result=json.loads(ctx['cached'][0]) if ctx['cached'] else self.cascade(p,ctx,tools)
+            result=json.loads(ctx['cached'][0]) if ctx['cached'] else self.cascade(p,ctx,ctx['tools'])
             verdict=self.check(p,result.get('content',''),ctx['policy'],ctx['sources'])
             if not verdict['allowed']:
                 self.store.audit(p['tenant'],p['username'],'guardrail.blocked','inference.output',{'reasons':verdict['reasons']})
@@ -980,6 +1075,7 @@ class Platform:
             released=''
             pending=''
             usage={}
+            calls=[]
             evidence='provider'
             def flush(final=False):
                 nonlocal released,pending
@@ -1010,18 +1106,21 @@ class Platform:
                     usage=cached.get('usage',{})
                     evidence=cached.get('evidence_class','provider')
                 else:
-                    early=self.cascade(p,ctx,last_streams=True) if len(ctx['tiers'])>1 else None
+                    early=self.cascade(p,ctx,ctx['tools'],last_streams=True) if len(ctx['tiers'])>1 else None
                 if not ctx['cached'] and early:
                     pending=early.get('content','')
+                    calls=early.get('tool_calls') or []
                     usage=early.get('usage',{})
                     evidence=early.get('evidence_class','provider')
                 elif not ctx['cached']:
-                    for piece in self.providers.stream(ctx['model'],ctx['messages'],ctx['max_tokens'],ctx['temperature']):
+                    for piece in self.providers.stream(ctx['model'],ctx['messages'],ctx['max_tokens'],ctx['temperature'],*([ctx['tools'],ctx['opts']] if ctx['tools'] or ctx['opts'] else [])):
                         if 'delta' in piece:
                             pending+=piece['delta']
                             delta=flush()
                             if delta:
                                 yield {'event':'delta','text':delta}
+                        if 'tool_calls' in piece:
+                            calls=piece['tool_calls']
                         if 'usage' in piece:
                             usage=piece['usage']
                         if 'evidence_class' in piece:
@@ -1029,12 +1128,68 @@ class Platform:
                 delta=flush(final=True)
                 if delta:
                     yield {'event':'delta','text':delta}
-                done=self._finish(p,ctx,{'content':released,'tool_calls':[],'usage':usage,'evidence_class':evidence})
+                for call in calls:
+                    verdict=guard(call.get('function',{}).get('arguments',''),policy)
+                    if not verdict['allowed'] or verdict['pii_redacted']:
+                        raise Fault('Tool arguments refused by guardrail',422)
+                if calls:
+                    yield {'event':'tool_calls','calls':calls}
+                done=self._finish(p,ctx,{'content':released,'tool_calls':calls,'usage':usage,'evidence_class':evidence})
                 yield {'event':'done',**{k:done[k] for k in ('model','cached','cost','saved','routing','latency_ms','usage','evidence_class') if k in done},
                        **({'escalations':done['escalations']} if 'escalations' in done else {}),**({'grounding':grounding} if grounding else {})}
             finally:
                 self._release(ctx)
         return events()
+
+    def embed(self,p,body):
+        """OpenAI-shaped embeddings: guardrail-checked input, daily budget, usage and audit like chat."""
+        require(p,'developer','admin')
+        texts=body.get('input')
+        texts=[texts] if isinstance(texts,str) else texts
+        if not isinstance(texts,list) or not 1<=len(texts)<=128 or any(not isinstance(t,str) or not 1<=len(t)<=20000 for t in texts) or sum(map(len,texts))>400000:
+            raise Fault('input must be a string or 1–128 strings of 1–20000 characters (400000 in total)')
+        fmt=body.get('encoding_format','float')
+        if fmt not in ('float','base64'):
+            raise Fault('encoding_format must be float or base64')
+        if body.get('dimensions') is not None:
+            raise Fault('dimensions is not supported; the model decides the vector size',422)
+        if not isinstance(body.get('model'),str):
+            raise Fault('model is required')
+        model=self.get(p,'models',body['model'])
+        if not model.get('enabled') or model.get('capability')!='embedding':
+            raise Fault('Model is disabled or not an embedding model',409)
+        policy=self.policy(p)
+        texts=[self._guard_input(p,t,policy) for t in texts]
+        estimate=sum(len(t)//3+1 for t in texts)
+        now=time.time()
+        with self.billing_lock, self.store.lock:
+            key=(p['tenant'],p['username'])
+            if self.active.get(key,0)>=4:
+                raise Fault('Concurrent request limit reached',429)
+            used=self.store.db.execute('SELECT COALESCE(SUM(input_tokens+output_tokens),0) FROM usage WHERE tenant=? AND created>?',(p['tenant'],now-86400)).fetchone()[0]
+            reserved=sum(v for k,v in getattr(self,'reservations',{}).items() if k[0]==p['tenant'])
+            if used+reserved+estimate>policy.get('daily_tokens',1000000):
+                raise Fault('Tenant daily token budget exhausted',429)
+            self.active[key]=self.active.get(key,0)+1
+            if not hasattr(self,'reservations'):
+                self.reservations={}
+            reservation=(p['tenant'],secrets.token_hex(8))
+            self.reservations[reservation]=estimate
+        start=time.monotonic()
+        try:
+            vectors=self.providers.embed(model,texts)
+        finally:
+            self._release({'key':key,'reservation':reservation})
+        # Embedding providers report no usage here, so tokens are estimated at 4 characters each.
+        tokens=sum(len(t)//4+1 for t in texts)
+        cost=tokens*model.get('input_price',0)/1e6
+        evidence='synthetic' if model['provider']=='demo' else 'provider'
+        with self.store.transaction():
+            self.store.db.execute('INSERT INTO usage (id,tenant,model,input_tokens,output_tokens,cost,latency_ms,cached,created,cached_tokens,saved) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+                                  (secrets.token_hex(12),p['tenant'],model['id'],tokens,0,cost,(time.monotonic()-start)*1000,0,time.time(),0,0))
+            self.store.audit(p['tenant'],p['username'],'embedding.completed',model['id'],{'inputs':len(texts),'cost':cost,'evidence_class':evidence})
+        data=[{'object':'embedding','index':i,'embedding':v if fmt=='float' else base64.b64encode(struct.pack('<%df'%len(v),*v)).decode()} for i,v in enumerate(vectors)]
+        return {'object':'list','data':data,'model':model['id'],'usage':{'prompt_tokens':tokens,'total_tokens':tokens},'nuvora':{'evidence_class':evidence,'cost':cost,'usage_estimated':True}}
 
     def usage_series(self,p,days=14):
         if not isinstance(days,int) or not 1<=days<=90:

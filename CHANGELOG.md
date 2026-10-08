@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Inference completeness:** `POST /v1/embeddings` (OpenAI shape; guardrail, budget, usage and audit like chat). Chat accepts `tools`, `tool_choice`, `response_format` (`json_object`, `json_schema`), `top_p` and `stop` on `/v1/chat/completions`, `/api/chat` and `/api/chat/stream`, with `tool_calls` in responses and streams. OpenAI-compatible, Ollama (native) and the offline demo support them; the AWS adapter gains Converse `toolConfig` and tool-use blocks. Anything a provider cannot do is a 422 naming the parameter. Tested with stub servers and a mocked boto3 only; nothing run against live OpenAI, Ollama or Bedrock.
 - **Live end-to-end check:** `scripts/e2e-live.py` runs chat, `/v1` streaming, embedding retrieval with filters, grounded answers, guardrails with a classifier model, a cascade router, a tool-using agent, vision, OCR and extraction against a real Ollama. All 16 checks passed on a CPU-only host.
 - **Provider timeout:** `NUVORA_PROVIDER_TIMEOUT` (5–900 s, default 45) replaces the fixed 45-second provider timeout. Settings shows the value in effect.
 - **Extraction:** bare field values from small models are kept at confidence 0 instead of being dropped, so they always count as low confidence.

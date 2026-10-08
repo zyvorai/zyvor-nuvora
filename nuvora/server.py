@@ -35,16 +35,21 @@ class Server(ThreadingHTTPServer):
 def openai_chunks(events):
     """Map Nuvora stream events to OpenAI chat.completion.chunk frames."""
     head={'id':'chatcmpl-'+secrets.token_hex(12),'object':'chat.completion.chunk','created':int(time.time()),'model':''}
+    called=False
     try:
         for item in events:
             kind=item.get('event')
+            called=called or kind=='tool_calls'
             if kind=='start':
                 head['model']=item['model']
                 yield {**head,'choices':[{'index':0,'delta':{'role':'assistant','content':''},'finish_reason':None}]}
             elif kind=='delta':
                 yield {**head,'choices':[{'index':0,'delta':{'content':item['text']},'finish_reason':None}]}
+            elif kind=='tool_calls':
+                calls=item['calls']
+                yield {**head,'choices':[{'index':0,'delta':{'tool_calls':[{'index':i,**c} for i,c in enumerate(calls)]},'finish_reason':None}]}
             elif kind=='done':
-                yield {**head,'choices':[{'index':0,'delta':{},'finish_reason':'stop'}],'usage':item.get('usage',{}),
+                yield {**head,'choices':[{'index':0,'delta':{},'finish_reason':'tool_calls' if called else 'stop'}],'usage':item.get('usage',{}),
                        'nuvora':{'evidence_class':item.get('evidence_class'),'cached':item.get('cached'),'cost':item.get('cost')}}
         yield {'event':'done','__raw__':'[DONE]'}
     finally:
@@ -374,10 +379,15 @@ class Handler(BaseHTTPRequestHandler):
             if path=='/v1/chat/completions' and method=='POST' and body.get('stream'):
                 self.sse(openai_chunks(app.open_stream(p,{k:v for k,v in body.items() if k!='stream'})),openai=True)
                 return
+            if path=='/v1/embeddings' and method=='POST':
+                self.respond(200,app.embed(p,body))
+                return
             if path in ('/api/chat','/v1/chat/completions') and method=='POST':
                 result=app.chat(p,body)
                 if path.startswith('/v1/'):
-                    response={'id':'chatcmpl-'+secrets.token_hex(12),'object':'chat.completion','created':int(time.time()),'model':result['model'],'choices':[{'index':0,'message':{'role':'assistant','content':result['content']},'finish_reason':'stop'}],'usage':result['usage'],'nuvora':{'evidence_class':result['evidence_class'],'cached':result['cached'],'cost':result['cost']}}
+                    calls=result.get('tool_calls') or []
+                    message={'role':'assistant','content':result['content'] if result['content'] or not calls else None,**({'tool_calls':calls} if calls else {})}
+                    response={'id':'chatcmpl-'+secrets.token_hex(12),'object':'chat.completion','created':int(time.time()),'model':result['model'],'choices':[{'index':0,'message':message,'finish_reason':'tool_calls' if calls else 'stop'}],'usage':result['usage'],'nuvora':{'evidence_class':result['evidence_class'],'cached':result['cached'],'cost':result['cost']}}
                     self.respond(200,response)
                 else:
                     self.respond(200,result)
