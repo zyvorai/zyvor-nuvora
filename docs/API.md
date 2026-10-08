@@ -135,7 +135,7 @@ POST `/mcp` supports a small JSON-RPC tools subset: initialize, tools/list, tool
 
 ## Bedrock-compatible API (preview)
 
-A front door that speaks the Amazon Bedrock wire format, so the AWS SDKs and CLI can talk to Nuvora with `endpoint_url` pointing at it. **Preview: authentication, framing, errors and routing, plus the bedrock-runtime inference operations, the model-listing operations and the `bedrock` control plane (guardrails, inference profiles, invocation logging, model customization, evaluation jobs, tags).** Every other Bedrock operation Nuvora recognises answers `501 UnsupportedOperationException` naming the operation; anything unrecognised answers `404 UnknownOperationException`. Nothing is silently accepted or ignored.
+A front door that speaks the Amazon Bedrock wire format (guide: [BEDROCK.md](BEDROCK.md)), so the AWS SDKs and CLI can talk to Nuvora with `endpoint_url` pointing at it. **Preview: authentication, framing, errors and routing, plus the bedrock-runtime inference operations, the model-listing operations and the `bedrock` control plane (guardrails, inference profiles, invocation logging, model customization, evaluation jobs, tags).** Every other Bedrock operation Nuvora recognises answers `501 UnsupportedOperationException` naming the operation; anything unrecognised answers `404 UnknownOperationException`. Nothing is silently accepted or ignored.
 
 | Operation | Request | Status |
 |---|---|---|
@@ -265,7 +265,7 @@ aws bedrock-runtime converse --endpoint-url http://127.0.0.1:8789 --model-id <nu
   --messages '[{"role":"user","content":[{"text":"Hello"}]}]'
 ```
 
-The `aws` CLI one-liner above is the intended usage and has not been run for this package: it is verified through boto3/botocore (the same request builders and parsers), not the CLI itself.
+The `aws` CLI (aws-cli 2.36.42) was run for `bedrock list-foundation-models`, `bedrock-runtime converse`, `count-tokens` and `invoke-model`, `bedrock-agent list-knowledge-bases`, `bedrock-agent-runtime retrieve` and, with an admin bearer token, `bedrock create-guardrail` / `delete-guardrail`; the rest is verified through boto3/botocore. The whole guide, with the operation table and the verification record, is [BEDROCK.md](BEDROCK.md); `scripts/bedrock/run-compat.sh` re-runs the boto3 suite.
 
 ## Failure conventions
 

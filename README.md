@@ -132,6 +132,7 @@ The [capability map](docs/COMPARISON.md) lists what's included and what isn't. I
 
 > **0.3.0 is an evaluation release, not a production certification.**
 > - Model calls work against configured OpenAI-compatible or Ollama endpoints. The optional AWS adapter (boto3, Converse and streaming) supports tool use in tests with a mocked client and hasn't been validated against a live account.
+> - Nuvora also answers the Amazon Bedrock wire format (the *inbound* side, a preview): boto3 and a few `aws` CLI commands work against a local Nuvora for model calls, guardrails, knowledge bases and agents. That is checked against the offline demo provider only, not against AWS, and many operations answer 501 or refuse members by name. See [docs/BEDROCK.md](docs/BEDROCK.md). It is unrelated to the outbound `aws` provider above.
 > - The bundled offline model is synthetic.
 > - Guardrails v2, routers, MCP tools, connectors, OCR, training and images are new in 0.3.0. They're tested against stubs and the offline model, not against every provider, trainer or source system.
 > - Nuvora calls your trainer and your image model. It doesn't host GPUs or models. Multi-region HA isn't implemented.
