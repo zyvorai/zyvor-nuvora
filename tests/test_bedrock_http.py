@@ -163,7 +163,7 @@ class BedrockHTTP(LiveServer):
         self.error(self.call('POST', '/guardrail/g1/version/1/apply', b'{"messages":[1]}', headers=sent), 403, 'InvalidSignatureException')
         # authenticated: the handler runs and rejects the body (no `source`)
         message = self.error(self.call('POST', '/guardrail/g1/version/1/apply', body, service='bedrock-runtime'), 400, 'ValidationException')
-        self.assertIn('source', message)
+        self.assertIn('unsupported field messages', message)
         digest = hashlib.sha256(body).hexdigest()
         extra = {'x-amz-content-sha256': digest}
         sent = signed_headers(self.cred['access_key_id'], self.cred['secret_access_key'], 'POST', '/guardrail/g1/version/1/apply', self.host, body, service='bedrock-runtime', extra=extra)
