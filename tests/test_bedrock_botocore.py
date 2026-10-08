@@ -50,7 +50,7 @@ class RealSdk(LiveServer):
         self.assertEqual(ctx.exception.response['ResponseMetadata']['HTTPStatusCode'], 404)
         with self.assertRaises(ClientError) as ctx:
             self.client('bedrock-agent-runtime').retrieve(knowledgeBaseId='ABCDEFGHIJ', retrievalQuery={'text': 'q'})
-        self.assertEqual(ctx.exception.response['Error']['Code'], 'UnsupportedOperationException')
+        self.assertEqual(ctx.exception.response['Error']['Code'], 'ResourceNotFoundException')
         with self.assertRaises(ClientError) as ctx:
             self.client('bedrock-agent').list_agents()
         self.assertEqual(ctx.exception.response['Error']['Code'], 'UnsupportedOperationException')

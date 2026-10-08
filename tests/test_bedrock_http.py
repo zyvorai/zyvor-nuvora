@@ -176,8 +176,8 @@ class BedrockHTTP(LiveServer):
         self.error(self.call('GET', '/inference-profiles/abc'), 501, 'UnsupportedOperationException')
         message = self.error(self.call('POST', '/async-invoke', b'{}', service='bedrock-runtime'), 501, 'UnsupportedOperationException')
         self.assertIn('StartAsyncInvoke', message)
-        message = self.error(self.call('POST', '/knowledgebases/kb1/retrieve', b'{}', service='bedrock-agent-runtime'), 501, 'UnsupportedOperationException')
-        self.assertIn('Retrieve', message)
+        message = self.error(self.call('POST', '/flows/f1/aliases/a1', b'{}', service='bedrock-agent-runtime'), 501, 'UnsupportedOperationException')
+        self.assertIn('InvokeFlow', message)
 
     def test_no_credentials_on_bedrock_roots_answers_in_bedrock_shape(self):
         conn = http.client.HTTPConnection(self.host)
