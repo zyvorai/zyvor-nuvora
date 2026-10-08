@@ -15,13 +15,13 @@ from .store import canonical
 from .security import CLASSIFIER_CATEGORIES, Fault, guard, require, validate_policy
 from .providers import DATA_IMAGE, Providers, check_support, text_of
 from .retrieval import chunks, search
-from . import actions, connectors, datasets, mcp_client, pagination, telemetry
+from . import actions, connectors, datasets, guardrails, mcp_client, pagination, telemetry
 from . import ingest as parsers
 from .integrations import Integrations, TOOLS as INTEGRATION_TOOLS
 
-KINDS=('actions','models','knowledge','documents','agents','prompts','policies','workflows','evaluations','recipes','routers','mcp_servers','connectors','datasets','memory','jobs','approvals')
-WRITABLE=('actions','models','knowledge','agents','prompts','policies','workflows','evaluations','recipes','routers','mcp_servers','connectors')
-ADMIN_KINDS=('models','policies','actions','mcp_servers','connectors')
+KINDS=('actions','models','knowledge','documents','agents','prompts','policies','workflows','evaluations','recipes','routers','mcp_servers','connectors','datasets','memory','jobs','approvals','guardrails')
+WRITABLE=('actions','models','knowledge','agents','prompts','policies','workflows','evaluations','recipes','routers','mcp_servers','connectors','guardrails')
+ADMIN_KINDS=('models','policies','actions','mcp_servers','connectors','guardrails')
 META_KEY=re.compile(r'[a-z][a-z0-9_]{0,39}')
 UNSURE=re.compile(r"\b(i\s+(do\s+not|don't)\s+know|i'?m\s+not\s+sure|i\s+am\s+not\s+sure|i\s+cannot\s+(answer|help)|i\s+can't\s+(answer|help)|unable\s+to\s+answer|not\s+enough\s+information)\b",re.I)
 TOOLS={
@@ -215,6 +215,7 @@ class Platform:
             'workflows':{'steps'},
             'evaluations':{'model','cases','pass_threshold','judge_model','knowledge_ids'},
             'recipes':{'model','method','dataset','dataset_id','teacher_model','rank','epochs','status'},
+            'guardrails':{'description','input','output','blocked_input_message','blocked_output_message'},
             'actions':{'url','method','key_env','description','input_schema','requires_approval'},
         }
         if set(data)-fields[kind]-{'name','expected_revision'}:
@@ -318,6 +319,19 @@ class Platform:
                     raise Fault('The guardrail classifier needs a real chat model')
                 if not data.get('classifier_categories'):
                     raise Fault('Choose at least one classifier category')
+        elif kind=='guardrails':
+            if not isinstance(data.get('description',''),str) or len(data.get('description',''))>200:
+                raise Fault('description is at most 200 characters')
+            for key in ('input','output'):
+                section=guardrails.validate_section(data.get(key),key.upper())
+                if section.get('classifier_model'):
+                    model=self.get(p,'models',section['classifier_model'])
+                    if model.get('capability','chat')!='chat' or model['provider']=='demo':
+                        raise Fault('The guardrail classifier needs a real chat model')
+                data[key]=section
+            for key in ('blocked_input_message','blocked_output_message'):
+                if not isinstance(data.get(key,'x'),str) or not 1<=len(data.get(key,'x'))<=500:
+                    raise Fault(key+' is 1–500 characters')
         elif kind=='workflows':
             steps=data.get('steps',[])
             if not isinstance(steps,list) or not 1<=len(steps)<=30:
@@ -511,11 +525,17 @@ class Platform:
         if kind=='models':
             if any(id in (x.get('model'),x.get('embedding_model'),x.get('rerank_model'),x.get('ocr_model'),x.get('transcription_model'),x.get('teacher_model')) for k in ('agents','knowledge','evaluations','recipes') for x in self.list(p,k)) \
                     or any(id in r.get('models',[]) or r.get('judge_model')==id for r in self.list(p,'routers')) \
-                    or any(x.get('classifier_model')==id for x in self.list(p,'policies')):
+                    or any(x.get('classifier_model')==id for x in self.list(p,'policies')) \
+                    or any((x.get(k) or {}).get('classifier_model')==id for x in self.list(p,'guardrails') for k in ('input','output')) \
+                    or any(((v.get('snapshot') or {}).get(k) or {}).get('classifier_model')==id for v in self.store.list(p['tenant'],'guardrail_versions') for k in ('input','output')):
                 raise Fault('Model is referenced by another resource',409)
         if kind=='knowledge' and any(c['knowledge_id']==id for c in self.list(p,'connectors')):
             raise Fault('Knowledge base is fed by a connector; delete the connector first',409)
         with self.store.transaction():
+            if kind=='guardrails':
+                for v in self.store.list(p['tenant'],'guardrail_versions'):
+                    if v['guardrail_id']==id:
+                        self.store.delete(p['tenant'],'guardrail_versions',v['id'])
             if kind=='knowledge':
                 for d in self.store.list(p['tenant'],'documents'):
                     if d['knowledge_id']==id:
@@ -794,6 +814,91 @@ class Platform:
         self._meter(p,model,{})
         return text
 
+    def guardrail_version(self,p,id,version):
+        """The stored sections of a guardrail at DRAFT or a numbered version. KeyError (404) when missing."""
+        version=guardrails.parse_version(version)
+        draft=self.get(p,'guardrails',id)
+        if version=='DRAFT':
+            return version,draft
+        try:
+            record=self.store.get(p['tenant'],'guardrail_versions',id+':'+str(version))
+        except KeyError:
+            raise KeyError('Guardrail version not found') from None
+        return version,{**record['snapshot'],'id':id}
+
+    def guardrail(self,p,ref):
+        """Resolve a request's `guardrail: {id, version}` into compiled input/output policies."""
+        if not isinstance(ref,dict) or set(ref)-{'id','version'} or not isinstance(ref.get('id'),str) or 'version' not in ref:
+            raise Fault('guardrail must be {"id": ..., "version": "DRAFT" or a version number}')
+        version,item=self.guardrail_version(p,ref['id'],ref['version'])
+        tag=ref['id']+':'+str(version)
+        return {'id':ref['id'],'version':version,
+                'input':guardrails.compile_section(item.get('input') or {},'INPUT',item.get('blocked_input_message',guardrails.DEFAULT_INPUT_MESSAGE),tag),
+                'output':guardrails.compile_section(item.get('output') or {},'OUTPUT',item.get('blocked_output_message',guardrails.DEFAULT_OUTPUT_MESSAGE),tag)}
+
+    def create_guardrail_version(self,p,id,description=''):
+        """Snapshot the DRAFT as the next immutable version number."""
+        require(p,'admin')
+        if not isinstance(description,str) or len(description)>200:
+            raise Fault('description is at most 200 characters')
+        draft=self.get(p,'guardrails',id)
+        with self.store.transaction():
+            self.store.db.lock_key('guardrail:'+p['tenant']+':'+id)
+            existing=[v for v in self.store.list(p['tenant'],'guardrail_versions') if v['guardrail_id']==id]
+            if len(existing)>=200:
+                raise Fault('A guardrail keeps at most 200 versions',409)
+            number=max([v['version'] for v in existing],default=0)+1
+            snapshot={k:draft[k] for k in ('name','description','input','output','blocked_input_message','blocked_output_message') if k in draft}
+            record=self.store.put(p['tenant'],'guardrail_versions',{'guardrail_id':id,'version':number,'description':description,'snapshot':snapshot,'draft_revision':draft['revision']},id+':'+str(number))
+            self.store.audit(p['tenant'],p['username'],'guardrails.version_created',id,{'version':number})
+        return self.guardrail_version_view(record)
+
+    @staticmethod
+    def guardrail_version_view(record):
+        return {'guardrail_id':record['guardrail_id'],'version':record['version'],'description':record['description'],'created':record['created'],**record['snapshot'],'draft_revision':record['draft_revision']}
+
+    def guardrail_versions(self,p,id):
+        self.get(p,'guardrails',id)
+        items=sorted((v for v in self.store.list(p['tenant'],'guardrail_versions') if v['guardrail_id']==id),key=lambda v:v['version'])
+        return {'items':[self.guardrail_version_view(v) for v in items]}
+
+    def apply_guardrail(self,p,guardrail_id,version,source,texts,sources=None):
+        """Run a guardrail over texts without calling a model (the engine behind ApplyGuardrail).
+
+        Returns {'action': 'NONE'|'GUARDRAIL_INTERVENED', 'guardrail': {id, version}, 'source',
+        'outputs': [{'text'}] , 'assessments': [{'index','action','findings'}]}. `outputs` is empty
+        when nothing intervened; when something was blocked it is one item holding the guardrail's
+        blocked message; when content was only masked it holds the masked texts in input order.
+        Unknown id or version raises KeyError (404); bad arguments raise Fault (400).
+        """
+        require(p,'developer','admin')
+        if source not in guardrails.SOURCES:
+            raise Fault('source must be INPUT or OUTPUT')
+        if not isinstance(texts,list) or not 1<=len(texts)<=20 or any(not isinstance(t,str) or len(t)>500000 for t in texts):
+            raise Fault('content must be 1–20 strings of at most 500000 characters')
+        if sources is not None and (not isinstance(sources,list) or len(sources)>20 or any(not isinstance(x,str) for x in sources)):
+            raise Fault('sources must be up to 20 strings')
+        if not isinstance(guardrail_id,str):
+            raise Fault('guardrail id must be a string')
+        number,item=self.guardrail_version(p,guardrail_id,version)
+        section=item.get('input' if source=='INPUT' else 'output') or {}
+        message=item.get('blocked_input_message' if source=='INPUT' else 'blocked_output_message',guardrails.DEFAULT_INPUT_MESSAGE)
+        policy=guardrails.compile_section(section,source,message,guardrail_id+':'+str(number))
+        assessments,masked,blocked=[],[],False
+        for index,text in enumerate(texts):
+            verdict=self.check(p,text,policy,sources if source=='OUTPUT' else None)
+            found=guardrails.findings(verdict,text)
+            action='BLOCKED' if not verdict['allowed'] else 'ANONYMIZED' if verdict['text']!=text else 'NONE'
+            blocked=blocked or action=='BLOCKED'
+            masked.append(verdict['text'])
+            assessments.append({'index':index,'action':action,'findings':found})
+        intervened=blocked or any(a['action']=='ANONYMIZED' for a in assessments)
+        if intervened:
+            self.store.audit(p['tenant'],p['username'],'guardrails.intervened',guardrail_id,{'version':number,'source':source,'blocked':blocked,
+                             'reasons':sorted({f['code'] for a in assessments for f in a['findings']})})
+        return {'action':'GUARDRAIL_INTERVENED' if intervened else 'NONE','guardrail':{'id':guardrail_id,'version':number},'source':source,
+                'outputs':[{'text':message}] if blocked else [{'text':t} for t in masked] if intervened else [],'assessments':assessments}
+
     def policy(self,p):
         policies=self.list(p,'policies')
         return policies[0] if policies else {'redact_pii':True,'detect_injection':True,'blocked_topics':[],'max_chars':100000}
@@ -880,7 +985,8 @@ class Platform:
         if flags is None:
             raise Fault('Guardrail classifier returned no usable verdict',503)
         threshold=policy.get('classifier_threshold',.5)
-        return [f for f in flags if f['category'] in categories and f['confidence']>=threshold]
+        per=policy.get('classifier_thresholds',{})
+        return [f for f in flags if f['category'] in categories and f['confidence']>=per.get(f['category'],threshold)]
 
     def check(self,p,text,policy,sources=None):
         """Deterministic guard, then the optional classifier model."""
@@ -904,6 +1010,8 @@ class Platform:
             raise Fault('sources must be up to 20 strings of at most 20000 characters')
         cleaned=[]
         policy=self.policy(p)
+        resolved=self.guardrail(p,body.get('guardrail')) if body.get('guardrail') is not None else None
+        guard_in,guard_out=(resolved['input'],resolved['output']) if resolved else (policy,policy)
         images=0
         request_tools,opts=request_options(body)
         if tools is None:
@@ -916,7 +1024,7 @@ class Platform:
             content=msg.get('content','')
             extra={}
             if msg.get('tool_calls') is not None:
-                extra['tool_calls']=self._clean_calls(p,msg,policy)
+                extra['tool_calls']=self._clean_calls(p,msg,guard_in)
                 content='' if content is None else content
             if msg['role']=='tool' and (not isinstance(msg.get('tool_call_id'),str) or not 1<=len(msg['tool_call_id'])<=200):
                 raise Fault('Tool messages need a tool_call_id')
@@ -926,7 +1034,7 @@ class Platform:
                 parts=[]
                 for part in content:
                     if isinstance(part,dict) and part.get('type')=='text' and isinstance(part.get('text'),str):
-                        parts.append({'type':'text','text':self._guard_input(p,part['text'],policy)})
+                        parts.append({'type':'text','text':self._guard_input(p,part['text'],guard_in)})
                     elif isinstance(part,dict) and part.get('type')=='image_url' and isinstance(part.get('image_url'),dict) \
                             and DATA_IMAGE.match(str(part['image_url'].get('url',''))):
                         if len(part['image_url']['url'])>7*1024*1024:
@@ -937,17 +1045,17 @@ class Platform:
                         raise Fault('Content parts must be text or base64 data: URL images (PNG, JPEG, WebP)')
                 cleaned.append({**msg,'content':parts,**extra})
             elif isinstance(content,str):
-                cleaned.append({**msg,'content':self._guard_input(p,content,policy),**extra})
+                cleaned.append({**msg,'content':self._guard_input(p,content,guard_in),**extra})
             else:
                 raise Fault('Invalid message')
         if images>4:
             raise Fault('At most 4 images per request')
-        if policy.get('classifier_model'):
+        if guard_in.get('classifier_model'):
             last=next((text_of(m['content']) for m in reversed(cleaned) if m['role']=='user'),'')
-            flagged=self.classify(p,last,policy) if last.strip() else []
+            flagged=self.classify(p,last,guard_in) if last.strip() else []
             if flagged:
-                self.store.audit(p['tenant'],p['username'],'guardrail.blocked','inference',{'reasons':['Classifier: '+f['category'] for f in flagged]})
-                raise Fault('Input refused by guardrail',422)
+                self.store.audit(p['tenant'],p['username'],'guardrail.blocked','inference',{'reasons':['Classifier: '+f['category'] for f in flagged],**({'guardrail':guard_in['_guardrail']} if resolved else {})})
+                raise Fault(guard_in.get('_message','Input refused by guardrail'),422)
         requested=body.get('model','auto')
         router=None
         if isinstance(requested,str) and requested.startswith('router:'):
@@ -966,7 +1074,7 @@ class Platform:
         temperature=body.get('temperature',.2)
         if not isinstance(maximum,int) or not 1<=maximum<=8192 or not isinstance(temperature,(int,float)) or not 0<=temperature<=2:
             raise Fault('Invalid generation settings')
-        fingerprint=hashlib.sha256(canonical({'model':model,'router':router,'messages':cleaned,'max_tokens':maximum,'temperature':temperature,'tools':tools,'opts':opts,'policy':policy}).encode()).hexdigest()
+        fingerprint=hashlib.sha256(canonical({'model':model,'router':router,'messages':cleaned,'max_tokens':maximum,'temperature':temperature,'tools':tools,'opts':opts,'policy':policy,**({'guardrail':[guard_in,guard_out]} if resolved else {})}).encode()).hexdigest()
         use_cache=body.get('cache',False) and not tools and temperature==0
         now=time.time()
         with self.billing_lock, self.store.lock:
@@ -985,7 +1093,7 @@ class Platform:
             reservation=(p['tenant'],secrets.token_hex(8))
             self.reservations[reservation]=estimate
             cached=self.store.db.execute('SELECT value FROM cache WHERE tenant=? AND key=? AND expires>?',(p['tenant'],fingerprint,now)).fetchone() if use_cache else None
-        return {'model':model,'messages':cleaned,'max_tokens':maximum,'temperature':temperature,'policy':policy,'fingerprint':fingerprint,
+        return {'model':model,'messages':cleaned,'max_tokens':maximum,'temperature':temperature,'policy':policy,'guard_out':guard_out,'fingerprint':fingerprint,
                 'use_cache':use_cache,'key':key,'reservation':reservation,'estimate':estimate,'cached':cached,'start':time.monotonic(),'sources':sources,
                 'tiers':tiers,'router':router,'escalations':[],'tools':tools,'opts':opts,
                 'routing':'router '+router['name'] if router else 'lowest configured price' if requested=='auto' else 'explicit'}
@@ -1008,8 +1116,8 @@ class Platform:
     def _guard_input(self,p,text,policy):
         verdict=guard(text,policy)
         if not verdict['allowed']:
-            self.store.audit(p['tenant'],p['username'],'guardrail.blocked','inference',{'reasons':verdict['reasons']})
-            raise Fault('Input refused by guardrail',422)
+            self.store.audit(p['tenant'],p['username'],'guardrail.blocked','inference',{'reasons':verdict['reasons'],**({'guardrail':policy['_guardrail']} if '_guardrail' in policy else {})})
+            raise Fault(policy.get('_message','Input refused by guardrail'),422)
         return verdict['text']
 
     def _release(self,ctx):
@@ -1044,15 +1152,16 @@ class Platform:
         ctx=self._begin(p,body,tools)
         try:
             result=json.loads(ctx['cached'][0]) if ctx['cached'] else self.cascade(p,ctx,ctx['tools'])
-            verdict=self.check(p,result.get('content',''),ctx['policy'],ctx['sources'])
+            gout=ctx['guard_out']
+            verdict=self.check(p,result.get('content',''),gout,ctx['sources'])
             if not verdict['allowed']:
-                self.store.audit(p['tenant'],p['username'],'guardrail.blocked','inference.output',{'reasons':verdict['reasons']})
-                raise Fault('Output refused by guardrail',422)
+                self.store.audit(p['tenant'],p['username'],'guardrail.blocked','inference.output',{'reasons':verdict['reasons'],**({'guardrail':gout['_guardrail']} if '_guardrail' in gout else {})})
+                raise Fault(gout.get('_message','Output refused by guardrail'),422)
             result['content']=verdict['text']
             if 'grounding' in verdict:
                 result['grounding']=verdict['grounding']
             for call in result.get('tool_calls',[]):
-                verdict=guard(call.get('function',{}).get('arguments',''),ctx['policy'])
+                verdict=guard(call.get('function',{}).get('arguments',''),gout)
                 if not verdict['allowed'] or verdict['pii_redacted']:
                     raise Fault('Tool arguments refused by guardrail',422)
             return self._finish(p,ctx,result)
@@ -1067,10 +1176,11 @@ class Platform:
         Grounding and classifier checks need the whole answer, so with either active the text
         is released only after the final check."""
         ctx=self._begin(p,body)
-        whole=bool(ctx['policy'].get('classifier_model') or (ctx['policy'].get('grounding_threshold') and ctx['sources']))
+        gout=ctx['guard_out']
+        whole=bool(gout.get('classifier_model') or (gout.get('grounding_threshold') and ctx['sources']))
 
         def events():
-            policy=ctx['policy']
+            policy=gout
             grounding={}
             released=''
             pending=''
@@ -1090,8 +1200,8 @@ class Platform:
                 verdict=self.check(p,candidate,policy,ctx['sources']) if final else guard(candidate,policy)
                 grounding.update(verdict.get('grounding',{}))
                 if not verdict['allowed']:
-                    self.store.audit(p['tenant'],p['username'],'guardrail.blocked','inference.output',{'reasons':verdict['reasons']})
-                    raise Fault('Output refused by guardrail',422)
+                    self.store.audit(p['tenant'],p['username'],'guardrail.blocked','inference.output',{'reasons':verdict['reasons'],**({'guardrail':policy['_guardrail']} if '_guardrail' in policy else {})})
+                    raise Fault(policy.get('_message','Output refused by guardrail'),422)
                 text=verdict['text']
                 delta=text[len(released):] if text.startswith(released) else text
                 released=text
@@ -1366,6 +1476,8 @@ class Platform:
             if not self.integrations.configured('trainer'):
                 raise Fault('No trainer is configured; set NUVORA_TRAINER_URL or export the recipe',503)
         spec=self.get(p,collection,target) if collection else None
+        if kind=='agent' and body.get('guardrail') is not None:
+            self.guardrail(p,body['guardrail'])
         if kind=='ingestion':
             body=self.ingestion_input(p,target,body)
             spec={'id':target}
@@ -1546,7 +1658,7 @@ class Platform:
             tools.append({'type':'function','function':{'name':name,**schema}})
         while steps<agent.get('max_steps',5):
             start=time.time()
-            result=self.chat(p,{'model':agent['model'],'messages':messages},tools if tools else None)
+            result=self.chat(p,{'model':agent['model'],'messages':messages,**({'guardrail':job['input']['guardrail']} if job['input'].get('guardrail') is not None else {})},tools if tools else None)
             steps+=1
             job['trace'].append({'step':steps,'type':'model','model':result['model'],'evidence_class':result['evidence_class'],'cost':result['cost'],'start':start,'end':time.time()})
             calls=result.get('tool_calls',[])
@@ -1554,7 +1666,7 @@ class Platform:
                 final={'answer':result['content'],'evidence_class':result['evidence_class'],'steps':steps}
                 if agent.get('summarize_memory'):
                     transcript='\n'.join(f"{m['role']}: {m.get('content') or ''}"[:2000] for m in messages[1:]+[{'role':'assistant','content':result['content']}])
-                    summary=self.chat(p,{'model':agent['model'],'temperature':0,'max_tokens':400,'messages':[{'role':'system','content':self.SUMMARY_PROMPT},{'role':'user','content':transcript[-20000:]}]})['content'].strip()[:4000]
+                    summary=self.chat(p,{**({'guardrail':job['input']['guardrail']} if job['input'].get('guardrail') is not None else {}),'model':agent['model'],'temperature':0,'max_tokens':400,'messages':[{'role':'system','content':self.SUMMARY_PROMPT},{'role':'user','content':transcript[-20000:]}]})['content'].strip()[:4000]
                     if summary:
                         a=self.propose(p,job,{'type':'memory_write','summary':True,'session':job['input'].get('session',job['id']),'owner':p['username'],'agent':agent['id'],'text':summary})
                         checkpoint.update(approval=a['id'],final=final,messages=messages,steps=steps)
