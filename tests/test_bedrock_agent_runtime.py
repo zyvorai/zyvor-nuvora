@@ -206,8 +206,8 @@ class AgentRuntime(LiveServer):
         self.assertEqual(job['result']['answer'], text)
         self.assertEqual(job['input']['session'], 'session-1')
 
-    def test_invoke_agent_trace_and_any_alias(self):
-        out, text, traces = self.invoke(agentAliasId='PRODALIAS1', enableTrace=True)
+    def test_invoke_agent_trace_and_alias_echo(self):
+        out, text, traces = self.invoke(enableTrace=True)
         self.assertTrue(text)
         self.assertTrue(traces)
         kinds = [list(t['trace']['orchestrationTrace'])[0] for t in traces]
@@ -216,7 +216,7 @@ class AgentRuntime(LiveServer):
         last = traces[-1]['trace']['orchestrationTrace']['observation']
         self.assertEqual((last['type'], last['finalResponse']['text']), ('FINISH', text))
         self.assertEqual(traces[0]['agentId'], self.agent['id'])
-        self.assertEqual(traces[0]['agentAliasId'], 'PRODALIAS1')
+        self.assertEqual((traces[0]['agentAliasId'], traces[0]['agentVersion']), ('TSTALIASID', 'DRAFT'))
         kb = next(t for t in traces if t['trace']['orchestrationTrace'].get('observation', {}).get('type') == 'KNOWLEDGE_BASE')
         self.assertTrue(kb['trace']['orchestrationTrace']['observation']['knowledgeBaseLookupOutput']['retrievedReferences'])
 
@@ -229,6 +229,7 @@ class AgentRuntime(LiveServer):
             self.assertEqual((code, status), ('ValidationException', 400), kw)
             self.assertIn(name, message)
         self.assertEqual(self.code(client.invoke_agent, agentId='NOSUCHAGENT', agentAliasId='TSTALIASID', sessionId='s1', inputText='x')[:2], ('ResourceNotFoundException', 404))
+        self.assertEqual(self.code(client.invoke_agent, agentId=self.agent['id'], agentAliasId='NOSUCHALIAS', sessionId='s1', inputText='x')[:2], ('ResourceNotFoundException', 404))
         self.assertEqual(self.code(client.invoke_agent, agentId=self.agent['id'], agentAliasId='TSTALIASID', sessionId='s1', inputText=' ')[0], 'ValidationException')
         self.assertEqual(self.code(lambda: self.invoke(self.client(self.view_cred)))[:2], ('AccessDeniedException', 403))
 

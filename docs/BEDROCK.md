@@ -138,7 +138,7 @@ Status key: **real** = implemented over Nuvora resources and exercised by `scrip
 |---|---|---|---|
 | Retrieve | real | D | Filters `equals`, `in`, `andAll`; `numberOfResults` is the page size, paged with `nextToken` over a pool of at most 20 passages |
 | RetrieveAndGenerate | real, refused | D | `KNOWLEDGE_BASE` only; `EXTERNAL_SOURCES`, orchestration and inference config refused. One whole-answer citation |
-| InvokeAgent | real, refused | D | A Platform agent job streamed as `chunk` (+ `trace` when enabled). Any alias id resolves to the current agent unless a stored alias exists; `memoryId`, `sessionState`, streaming configuration refused. A run waiting for approval is `ConflictException` |
+| InvokeAgent | real, refused | D | A Platform agent job streamed as `chunk` (+ `trace` when enabled). The alias decides what runs: `TSTALIASID` is the DRAFT, any other alias runs its pinned numbered version (model, instruction, tools from that version's action groups, knowledge bases, guardrail, max steps); unknown alias is 404, an alias whose version or action is gone is `ConflictException`, `REJECT_INVOCATIONS` is `ValidationException`; `memoryId`, `sessionState`, streaming configuration refused. A run waiting for approval is `ConflictException` |
 | GetAgentMemory, DeleteAgentMemory | recorded | | 501 |
 | InvokeFlow and other flow operations | recorded | | 501 |
 

@@ -1462,7 +1462,7 @@ class Platform:
                     break
         return {'text':self.fill(chosen[1],variables),'revision':prompt['revision'],'variant':chosen[0]}
 
-    def new_job(self,p,kind,target,body,idempotency=None):
+    def new_job(self,p,kind,target,body,idempotency=None,pinned_spec=None):
         require(p,'developer','admin')
         if kind not in ('agent','workflow','evaluation','batch','experiment','extract','sync','training','ingestion'):
             raise Fault('Unknown job type')
@@ -1476,6 +1476,11 @@ class Platform:
             if not self.integrations.configured('trainer'):
                 raise Fault('No trainer is configured; set NUVORA_TRAINER_URL or export the recipe',503)
         spec=self.get(p,collection,target) if collection else None
+        if pinned_spec is not None:
+            # An agent run of a stored version snapshot (Bedrock InvokeAgent through an alias); native runs pass none.
+            if kind!='agent' or not isinstance(pinned_spec,dict) or pinned_spec.get('id')!=target:
+                raise Fault('A pinned spec must be the snapshot of the agent being run')
+            spec=pinned_spec
         if kind=='agent' and body.get('guardrail') is not None:
             self.guardrail(p,body['guardrail'])
         if kind=='ingestion':
@@ -1497,7 +1502,7 @@ class Platform:
             spec=self.extraction_spec(p,body)
             target=spec['source']
             stored={k:v for k,v in body.items() if k not in ('text','image')}
-        fingerprint=hashlib.sha256(canonical([kind,target,body]).encode()).hexdigest()
+        fingerprint=hashlib.sha256(canonical([kind,target,body]+([pinned_spec] if pinned_spec is not None else [])).encode()).hexdigest()
         with self.store.transaction():
             if idempotency:
                 if len(idempotency)>120:

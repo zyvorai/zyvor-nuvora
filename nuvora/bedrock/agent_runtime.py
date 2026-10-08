@@ -16,6 +16,7 @@ from ..security import Fault, require
 from ..store import canonical
 from . import errors, eventstream as es
 from .router import Response, Stream
+from .control_agent import resolve_alias
 from .runtime import _check_keys, resolve
 
 MAX_RESULTS = 20          # Platform retrieval ranks at most 20 passages per query
@@ -235,9 +236,37 @@ def wait_seconds():
         return 50.0
 
 
-def _run_to_completion(req, agent_id, text, session):
+def _pinned_run(req, resolved):
+    """(agent spec, job input extras) for a resolved alias: the pinned version's snapshot, checked to be runnable.
+
+    The snapshot already holds the version's model, system prompt, tools (from its action groups), knowledge ids and
+    max_steps; what it names must still exist, otherwise the alias points at something that cannot run (ConflictException)."""
+    app, p, spec = req.app, req.principal, resolved['agent']
+    where = f"Agent alias {resolved['agentAliasId']} (version {resolved['agentVersion']})"
+    for tool in spec.get('tools', []):
+        if tool.startswith('action_'):
+            try:
+                app.get(p, 'actions', tool[7:])
+            except KeyError:
+                raise errors.BedrockError('ConflictException', f'{where} uses an action that no longer exists ({tool[7:]}); recreate the action group on a new version and move the alias', 409) from None
+    for kb_id in spec.get('knowledge_ids', []):
+        try:
+            app.get(p, 'knowledge', kb_id)
+        except KeyError:
+            raise errors.BedrockError('ConflictException', f'{where} uses knowledge base {kb_id}, which no longer exists', 409) from None
+    extras = {}
+    if resolved['guardrail']:
+        try:
+            app.guardrail(p, resolved['guardrail'])
+        except KeyError:
+            raise errors.BedrockError('ConflictException', f"{where} uses guardrail {resolved['guardrail']['id']} version {resolved['guardrail']['version']}, which no longer exists", 409) from None
+        extras['guardrail'] = resolved['guardrail']
+    return spec, extras
+
+
+def _run_to_completion(req, agent_id, text, session, spec=None, extras=None):
     app, p = req.app, req.principal
-    job = app.new_job(p, 'agent', agent_id, {'message': text, 'session': session})
+    job = app.new_job(p, 'agent', agent_id, {'message': text, 'session': session, **(extras or {})}, pinned_spec=spec)
     worker = getattr(app, 'worker_thread', None)
     if not (worker and worker.is_alive()):
         # No background worker in this process (embedded use, tests): run the job on its own thread
@@ -266,9 +295,9 @@ def _run_to_completion(req, agent_id, text, session):
         time.sleep(0.05)
 
 
-def _trace_events(job, agent, alias, session, now):
+def _trace_events(job, agent, alias, version, session, now):
     """TracePart payloads from the job trace, in order, ending with the FINISH observation."""
-    base = {'agentId': agent['id'], 'agentAliasId': alias, 'agentVersion': str(agent.get('revision', 1)), 'sessionId': session, 'eventTime': now}
+    base = {'agentId': agent['id'], 'agentAliasId': alias, 'agentVersion': version, 'sessionId': session, 'eventTime': now}
     kb_id = (agent.get('knowledge_ids') or [''])[0]
     out = []
 
@@ -313,16 +342,15 @@ def invoke_agent(req):
     agent_id, alias, session = req.params['agentId'], req.params['agentAliasId'], req.params['sessionId']
     if not SESSION_ID.fullmatch(session):
         raise errors.validation('sessionId must be 2-100 characters of letters, digits and . _ : -')
-    try:
-        agent = req.app.get(req.principal, 'agents', agent_id)
-    except KeyError:
-        raise errors.not_found(f'Agent {agent_id} does not exist for this tenant')
-    # Agent aliases do not exist as a resource in this release: TSTALIASID and any other alias id
-    # run the agent's current definition. (Alias ids are not validated.)
-    job = _run_to_completion(req, agent['id'], text, session)
+    # The alias decides what runs: TSTALIASID is the DRAFT, any other alias its pinned numbered version (model, instruction,
+    # tools from the version's action groups, knowledge bases, guardrail, max steps). An unknown alias is ResourceNotFound.
+    resolved = resolve_alias(req, agent_id, alias)
+    agent = resolved['agent']
+    spec, extras = _pinned_run(req, resolved)
+    job = _run_to_completion(req, agent['id'], text, session, spec, extras)
     answer = job['result']['answer']
     now = time.time()
-    traces = _trace_events(job, agent, alias, session, now) if body.get('enableTrace') else []
+    traces = _trace_events(job, agent, resolved['agentAliasId'], resolved['agentVersion'], session, now) if body.get('enableTrace') else []
 
     def frames():
         for part in traces:
