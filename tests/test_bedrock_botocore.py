@@ -52,7 +52,7 @@ class RealSdk(LiveServer):
             self.client('bedrock-agent-runtime').retrieve(knowledgeBaseId='ABCDEFGHIJ', retrievalQuery={'text': 'q'})
         self.assertEqual(ctx.exception.response['Error']['Code'], 'ResourceNotFoundException')
         with self.assertRaises(ClientError) as ctx:
-            self.client('bedrock-agent').list_agents()
+            self.client('bedrock-agent').delete_agent_version(agentId='ABCDEFGHIJ', agentVersion='1')
         self.assertEqual(ctx.exception.response['Error']['Code'], 'UnsupportedOperationException')
 
     def test_wrong_secret_is_rejected_with_the_aws_error_code(self):
