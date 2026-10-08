@@ -110,6 +110,36 @@ GET `/api/usage/series?days=1..90` returns daily buckets (requests, tokens, cost
 
 POST `/mcp` supports a small JSON-RPC tools subset: initialize, tools/list, tools/call. `list_models` and `search_knowledge` are read-only. It is not a full MCP streaming transport.
 
+## Bedrock-compatible API (preview)
+
+A front door that speaks the Amazon Bedrock wire format, so the AWS SDKs and CLI can talk to Nuvora with `endpoint_url` pointing at it. **Preview: this package ships authentication, framing, errors and routing, and one real operation.** Every other Bedrock operation Nuvora recognises answers `501 UnsupportedOperationException` naming the operation; anything unrecognised answers `404 UnknownOperationException`. Nothing is silently accepted or ignored.
+
+| Operation | Request | Status |
+|---|---|---|
+| ListFoundationModels | GET `/foundation-models` (`byProvider`, `byOutputModality`, `byInferenceType`, `byCustomizationType`; other parameters are rejected with `ValidationException`) | Implemented from the tenant's enabled models (`modelSummaries`; `modelArn` is `arn:nuvora:bedrock:<region>::foundation-model/<id>`) |
+| Converse, ConverseStream, InvokeModel\*, CountTokens, ApplyGuardrail, Retrieve, RetrieveAndGenerate, InvokeAgent, control-plane guardrails/agents/knowledge bases/jobs/logging/tags | Recognised paths (see `nuvora/bedrock/router.py`) | 501 until later packages implement them |
+
+Paths root at `/model/…`, `/guardrail/…`, `/foundation-models`, `/inference-profiles`, `/guardrails`, `/agents`, `/knowledgebases`, `/flows`, `/retrieveAndGenerate` and similar. Requests are routed by method and path; the SigV4 credential-scope service (`bedrock`, `bedrock-runtime`, `bedrock-agent`, `bedrock-agent-runtime`) must be one of those four but does not select the route, because SDKs sign several of these services as `bedrock`. Any region is accepted. The console's own `/agents`, `/guardrails` and `/knowledgebases` pages are untouched unless the request carries an AWS4 or Bearer `Authorization` header.
+
+**Authentication**
+- AWS Signature V4 (header form) with an access key from `/api/aws-credentials`. Verified: canonical request (path encoded twice, sorted query, trimmed headers), string to sign, signing key, constant-time compare, ±5 minute clock skew, payload hash (`x-amz-content-sha256` must match the body, or be `UNSIGNED-PAYLOAD`), `host` and `x-amz-date` must be signed. Not supported: presigned query-string URLs, `STREAMING-*` chunk signing, `X-Amz-Security-Token` session credentials. Chunked request bodies are refused.
+- `Authorization: Bearer <Nuvora token>` (a session or service token, or an OIDC JWT): what the SDKs send for `AWS_BEARER_TOKEN_BEDROCK`.
+- Both resolve to the same principal as the native API (tenant, user, role, groups). A credential never outranks its user's current role, and is deleted with the user.
+- Failures: `403 MissingAuthenticationTokenException | UnrecognizedClientException | InvalidSignatureException | IncompleteSignatureException`. Twenty failures in five minutes from one client address answer `429 ThrottlingException`. Failures against a known access key id add a `bedrock.auth.failed` audit event (reason, service, client address, never the secret or signature); unknown key ids are only throttled.
+
+**Errors** are JSON `{"message": "..."}` with `x-amzn-ErrorType` and `x-amzn-RequestId` headers: ValidationException 400, AccessDeniedException 403, ResourceNotFoundException 404, ConflictException 409, ThrottlingException 429, InternalServerException 500, ServiceUnavailableException 503, plus the gateway errors above. Native `Fault`s raised inside an operation map by status.
+
+**Streams** use `application/vnd.amazon.eventstream` (`nuvora/bedrock/eventstream.py` encodes and decodes frames with both CRC32s and string/byte-array/integer/uuid headers). The connection closes at the end of the stream; a failure after the first frame is sent as an exception frame.
+
+**Credential administration** (admin; needs `NUVORA_SECRET_KEY`, see Operations):
+- POST `/api/aws-credentials` `{role?: viewer|developer, lifetime?: 60..31536000 seconds (default 30 days), label?, username?}` returns `{access_key_id, secret_access_key, username, role, label, created, expires}` with HTTP 201. The secret is shown once. `username` issues for another member; the role cannot exceed that member's role. Without `NUVORA_SECRET_KEY` (32+ characters) the call answers 503.
+- GET `/api/aws-credentials` lists live credentials without secrets. DELETE `/api/aws-credentials/{access_key_id}` revokes.
+
+```bash
+export AWS_ACCESS_KEY_ID=NVRA… AWS_SECRET_ACCESS_KEY=… AWS_DEFAULT_REGION=us-east-1
+aws bedrock list-foundation-models --endpoint-url http://127.0.0.1:8789
+```
+
 ## Failure conventions
 
 400 validation, 401 authentication, 403 role/origin/tool/host denial, 404 missing tenant object, 409 stale/expired/reused state, 413 oversized body, 422 guardrail or model capability refusal, 429 budget/concurrency throttle, 502 provider failure, 503 unavailable optional adapter. Some optimistic storage conflicts currently return 400.

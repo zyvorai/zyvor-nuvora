@@ -7,6 +7,7 @@
 | `NUVORA_ADMIN_PASSWORD` | Initial default-tenant administrator password, 12–256 characters |
 | `NUVORA_ALLOW_DEMO_PASSWORD` | Set to 1 to accept the demo password `Admin@321` for that first administrator only (labs; set by `deploy-remote.sh`) |
 | `NUVORA_PROVIDER_HOSTS` | Exact comma-separated provider hostnames; default localhost,127.0.0.1 |
+| `NUVORA_SECRET_KEY` | 32+ characters; required to issue or use AWS-style access keys for the Bedrock-compatible API (see People and keys). Keep it out of the database backup |
 | `NUVORA_SECRET_*` | Operator-provided credentials referenced by model configuration |
 | `NUVORA_BEHIND_TLS_PROXY` | Set to 1 only for a trusted HTTPS reverse proxy |
 | `NUVORA_URL`, `NUVORA_TOKEN` | CLI base URL and scoped bearer token |
@@ -97,6 +98,14 @@ Verification detects changed exported events. It cannot establish who produced t
 Administrators manage members in **Govern → Access**: create, change role, or remove. You can't change your own role or remove yourself, and the last administrator can't be demoted or removed. Demoting someone below developer revokes their service tokens.
 
 Anyone can change their password from the account menu; that signs out their other sessions. Service tokens are created and revoked in **Govern → API keys** or with `POST`/`DELETE /api/tokens`. The secret is shown once. **Govern → Settings** shows administrators the effective transport, worker state, provider allow-list, policy, budget and limits.
+
+### AWS-style access keys (Bedrock-compatible API, preview)
+
+SigV4 needs the secret itself to recompute a signature, so these secrets are the one place Nuvora stores something recoverable (service tokens remain SHA-256 digests). Set `NUVORA_SECRET_KEY` to a random value of 32+ characters (`openssl rand -hex 32`) before issuing; without it `POST /api/aws-credentials` answers 503 and signed requests are refused. Bearer tokens on Bedrock paths do not need it.
+
+Storage scheme (`nuvora/bedrock/credentials.py`): two keys are derived with HMAC-SHA256 from `NUVORA_SECRET_KEY` (encryption and MAC); the secret is XORed with an HMAC-SHA256 keystream over a fresh 16-byte nonce, and an HMAC tag over version, access key id, nonce and ciphertext is verified before use (encrypt-then-MAC; the tag binds the row to its key id). It is a small stdlib-only construction, not a KMS: someone holding both the database and `NUVORA_SECRET_KEY` can recover every secret, and changing the key invalidates every issued credential (reissue them). Back the key up separately from database backups and replicate it to every replica.
+
+Issue and revoke with `POST`/`GET`/`DELETE /api/aws-credentials` (administrators). The secret is shown once; keys last 30 days by default and are limited to the viewer or developer role, never above the owner's role. Removing a member deletes their keys. Failed signatures are throttled per client address (20 per five minutes) and, for known key ids, audited as `bedrock.auth.failed`. Behind a reverse proxy the throttle sees the proxy's address.
 
 ## Limits
 

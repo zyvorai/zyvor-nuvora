@@ -197,6 +197,7 @@ class Auth:
                 raise Fault('A workspace needs at least one administrator',409)
             self.store.db.execute('DELETE FROM users WHERE tenant=? AND username=?',(principal['tenant'],username))
             self.store.db.execute('DELETE FROM tokens WHERE tenant=? AND username=?',(principal['tenant'],username))
+            self.store.db.execute('DELETE FROM aws_credentials WHERE tenant=? AND username=?',(principal['tenant'],username))
         self.store.audit(principal['tenant'],principal['username'],'user.removed',username)
 
     def set_groups(self, principal, username, groups):

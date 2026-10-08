@@ -14,7 +14,8 @@ import time
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import quote, urlsplit, unquote
-from . import __version__, integrations, oidc as sso
+from . import __version__, bedrock, integrations, oidc as sso
+from .bedrock.credentials import Credentials
 from .platform import Platform, KINDS
 from .providers import provider_timeout
 from .security import Auth, Fault, require
@@ -196,6 +197,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_DELETE(self):
         self.handle_request('DELETE')
 
+    def do_PUT(self):
+        self.handle_request('PUT')
+
     def handle_request(self,method):
         try:
             self.connection.settimeout(60)
@@ -203,6 +207,9 @@ class Handler(BaseHTTPRequestHandler):
             app=self.server.platform
             if path=='/healthz':
                 self.respond(200,{'status':'ok','version':__version__,'maturity':'evaluation'})
+                return
+            if bedrock.matches(method,path,self.headers):
+                bedrock.handle(self,method)
                 return
             if not path.startswith(('/api/','/v1/','/mcp')):
                 if method!='GET':
@@ -325,6 +332,16 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path.startswith('/api/tokens/') and method=='DELETE':
                 app.auth.revoke_token(p,path.rsplit('/',1)[1])
+                self.respond(200,{'ok':True})
+                return
+            if path=='/api/aws-credentials' and method=='POST':
+                self.respond(201,Credentials(app.store,app.auth).issue(p,body.get('role','viewer'),body.get('lifetime',30*86400),body.get('label',''),body.get('username')))
+                return
+            if path=='/api/aws-credentials' and method=='GET':
+                self.respond(200,{'credentials':Credentials(app.store,app.auth).list(p)})
+                return
+            if path.startswith('/api/aws-credentials/') and method=='DELETE':
+                Credentials(app.store,app.auth).revoke(p,path.rsplit('/',1)[1])
                 self.respond(200,{'ok':True})
                 return
             if path.startswith('/api/users/'):
