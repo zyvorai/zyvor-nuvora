@@ -1060,7 +1060,7 @@ def resolve_alias(req, agent_id, alias_id):
       guardrail           {'id', 'version'} for Platform.guardrail / the job's `guardrail` input, or None
       actionGroups        [{actionGroupId, actionGroupName, actionGroupState, actionIds}] of that version
       knowledgeBases      [{knowledgeBaseId, knowledgeBaseState, description}] of that version
-    Raises ResourceNotFoundException for an unknown agent, alias or version and ValidationException when the alias has
+    Raises ResourceNotFoundException for an unknown agent or alias, ConflictException when the alias routes to a version that no longer exists, and ValidationException when the alias has
     aliasInvocationState REJECT_INVOCATIONS."""
     agent = agent_of(req, agent_id)
     if ref(req, 'agent-alias', alias_id, 'agentAliasId') == TEST_ALIAS:
@@ -1070,10 +1070,15 @@ def resolve_alias(req, agent_id, alias_id):
         if alias['invocation_state'] != 'ACCEPT_INVOCATIONS':
             raise errors.validation(f'Agent alias {alias["id"]} does not accept invocations')
         version, name = alias['routing'][0]['agentVersion'], alias['name']
-    source = agent_at(req, agent, version)
-    meta = meta_get(req.app, req.principal['tenant'], agent['id'])
-    if version != DRAFT:
-        meta = {**meta, **version_row(req, agent['id'], version)['meta']}
+    try:
+        source = agent_at(req, agent, version)
+        meta = meta_get(req.app, req.principal['tenant'], agent['id'])
+        if version != DRAFT:
+            meta = {**meta, **version_row(req, agent['id'], version)['meta']}
+    except errors.BedrockError as exc:
+        if alias is None or exc.status not in (404, 500):
+            raise
+        raise errors.BedrockError('ConflictException', f'Agent alias {alias["id"]} routes to version {version}, which no longer exists; point the alias at a prepared version with UpdateAgentAlias', 409) from None
     guard = meta.get('guardrailConfiguration')
     return {'agentId': agent['id'], 'agentAliasId': alias['id'] if alias else TEST_ALIAS, 'agentAliasName': name, 'agentVersion': version, 'agent': source,
             'instruction': source.get('system_prompt', ''), 'foundationModel': meta.get('foundationModel') or source.get('model', ''),

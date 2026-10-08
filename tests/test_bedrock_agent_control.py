@@ -427,6 +427,117 @@ class AgentControl(Base):
         self.assertEqual(self.json('/api/actions')['items'], [])
         self.assertEqual(self.err(self.ba.get_agent_action_group, agentId=agent_id, agentVersion='DRAFT', actionGroupId=group['actionGroupId'])[:2], ('ResourceNotFoundException', 404))
 
+    # ---- InvokeAgent runs the version the alias pins ----------------------------------------------
+
+    def runtime_client(self):
+        return boto3.client('bedrock-agent-runtime', endpoint_url=self.url, region_name='us-east-1', aws_access_key_id=self.cred['access_key_id'],
+                            aws_secret_access_key=self.cred['secret_access_key'], config=Config(retries={'max_attempts': 1}))
+
+    def invoke(self, agent_id, alias, **kw):
+        out = self.runtime_client().invoke_agent(agentId=agent_id, agentAliasId=alias, sessionId='sess-1', inputText='hello', **kw)
+        text, traces = '', []
+        for event in out['completion']:
+            if 'chunk' in event:
+                text += event['chunk']['bytes'].decode()
+            elif 'trace' in event:
+                traces.append(event['trace'])
+        return text, traces
+
+    def scripted(self):
+        """A chat provider that reports what the agent job handed it: system prompt, tool names, model."""
+        seen = []
+
+        def chat(model, messages, tools, maximum, temp):
+            names = sorted(t['function']['name'] for t in tools or [])
+            seen.append({'model': model, 'system': messages[0]['content'], 'tools': names})
+            return {'content': f"system={messages[0]['content'][:20]}|tools={','.join(names)}", 'tool_calls': [], 'usage': {}, 'evidence_class': 'scripted'}
+        original = self.app.providers.chat
+        self.app.providers.chat = chat
+        self.addCleanup(setattr, self.app.providers, 'chat', original)
+        return seen
+
+    def test_invoke_agent_runs_the_version_the_alias_pins(self):
+        url, _ = self.stub({})
+        kb = self.kb()
+        agent_id = self.agent()['agentId']
+        self.ba.create_agent_action_group(agentId=agent_id, agentVersion='DRAFT', actionGroupName='orders', apiSchema={'payload': self.spec(url)})
+        self.ba.associate_agent_knowledge_base(agentId=agent_id, agentVersion='DRAFT', knowledgeBaseId=kb['knowledgeBaseId'], description='docs')
+        self.ba.prepare_agent(agentId=agent_id)
+        alias = self.ba.create_agent_alias(agentId=agent_id, agentAliasName='live')['agentAlias']
+        self.assertEqual(alias['routingConfiguration'], [{'agentVersion': '1'}])
+        pinned_tools = sorted(self.json(f'/api/agents/{agent_id}')['tools'])
+        self.assertEqual(len(pinned_tools), 2)
+        # edit the DRAFT after the version was pinned: new instruction, no tools, no knowledge base
+        group = self.ba.list_agent_action_groups(agentId=agent_id, agentVersion='DRAFT')['actionGroupSummaries'][0]
+        self.ba.update_agent_action_group(agentId=agent_id, agentVersion='DRAFT', actionGroupId=group['actionGroupId'], actionGroupName='orders', actionGroupState='DISABLED')
+        self.ba.disassociate_agent_knowledge_base(agentId=agent_id, agentVersion='DRAFT', knowledgeBaseId=kb['knowledgeBaseId'])
+        self.ba.update_agent(agentId=agent_id, agentName='helper', foundationModel=self.demo, agentResourceRoleArn='r',
+                             instruction='A different DRAFT instruction that is long enough to be accepted.')
+        self.assertEqual(self.json(f'/api/agents/{agent_id}')['tools'], [])
+        seen = self.scripted()
+        old, traces = self.invoke(agent_id, alias['agentAliasId'], enableTrace=True)
+        new, _ = self.invoke(agent_id, 'TSTALIASID')
+        self.assertEqual(seen[0]['system'], INSTRUCTION)
+        self.assertEqual(seen[0]['tools'], pinned_tools)
+        self.assertEqual((seen[1]['system'][:20], seen[1]['tools']), ('A different DRAFT in', []))
+        self.assertNotEqual(old, new)
+        self.assertEqual(traces[0]['agentVersion'], '1')
+        self.assertEqual(traces[0]['agentAliasId'], alias['agentAliasId'])
+        jobs = sorted((j for j in self.app.list(self.p, 'jobs') if j['type'] == 'agent'), key=lambda j: j['created'])
+        self.assertEqual((jobs[0]['spec']['knowledge_ids'], jobs[1]['spec']['knowledge_ids']), ([kb['knowledgeBaseId']], []))
+        # moving the alias to a newer version changes what it runs
+        self.ba.prepare_agent(agentId=agent_id)
+        newer = self.ba.create_agent_alias(agentId=agent_id, agentAliasName='next')['agentAlias']
+        self.assertEqual(newer['routingConfiguration'], [{'agentVersion': '2'}])
+        self.ba.update_agent_alias(agentId=agent_id, agentAliasId=alias['agentAliasId'], agentAliasName='live', routingConfiguration=[{'agentVersion': '2'}])
+        self.invoke(agent_id, alias['agentAliasId'])
+        self.assertEqual((seen[2]['system'][:20], seen[2]['tools']), ('A different DRAFT in', []))
+
+    def test_native_agent_run_is_unchanged(self):
+        agent = self.json('/api/agents', {'name': 'native', 'model': self.demo, 'tools': [], 'knowledge_ids': [], 'max_steps': 3}, expect=201)
+        job = self.app.new_job(self.p, 'agent', agent['id'], {'message': 'hi'})
+        self.assertEqual((job['spec']['id'], job['spec']['max_steps']), (agent['id'], 3))
+        with self.assertRaises(Exception):
+            self.app.new_job(self.p, 'agent', agent['id'], {'message': 'hi'}, pinned_spec={'id': 'other'})
+
+    def test_invoke_agent_alias_errors(self):
+        agent_id = self.agent()['agentId']
+        runtime = self.runtime_client()
+
+        def call(alias):
+            return self.err(runtime.invoke_agent, agentId=agent_id, agentAliasId=alias, sessionId='sess-1', inputText='hi')
+        self.assertEqual(call('NOSUCHALIAS')[:2], ('ResourceNotFoundException', 404))
+        self.ba.prepare_agent(agentId=agent_id)
+        alias = self.ba.create_agent_alias(agentId=agent_id, agentAliasName='live')['agentAlias']
+        # the history of the pinned revision is gone: a clear conflict, not an internal error
+        revision = self.app.store.get('a', 'agent_versions', agent_id + ':1')['agent_revision']
+        self.app.store.delete('a', 'versions', f'{agent_id}:{revision}')
+        code, status, message = call(alias['agentAliasId'])
+        self.assertEqual((code, status), ('ConflictException', 409))
+        self.assertIn('version 1', message)
+        self.ba.update_agent_alias(agentId=agent_id, agentAliasId=alias['agentAliasId'], agentAliasName='live', aliasInvocationState='REJECT_INVOCATIONS')
+        self.assertEqual(call(alias['agentAliasId'])[0], 'ValidationException')
+
+    def test_invoke_agent_alias_keeps_its_action_and_refuses_one_that_is_gone(self):
+        url, _ = self.stub({})
+        agent_id = self.agent()['agentId']
+        group = self.ba.create_agent_action_group(agentId=agent_id, agentVersion='DRAFT', actionGroupName='orders', apiSchema={'payload': self.spec(url)})['agentActionGroup']
+        self.ba.prepare_agent(agentId=agent_id)
+        alias = self.ba.create_agent_alias(agentId=agent_id, agentAliasName='live')['agentAlias']
+        tool = self.json(f'/api/agents/{agent_id}')['tools']
+        self.ba.delete_agent_action_group(agentId=agent_id, agentVersion='DRAFT', actionGroupId=group['actionGroupId'])
+        self.assertEqual(self.json(f'/api/agents/{agent_id}')['tools'], [])
+        seen = self.scripted()
+        # the pinned version still owns the action, so the alias keeps offering it while the DRAFT does not
+        self.invoke(agent_id, alias['agentAliasId'])
+        self.invoke(agent_id, 'TSTALIASID')
+        self.assertEqual((seen[0]['tools'], seen[1]['tools']), (tool, []))
+        # an action removed behind the version's back is a clear conflict rather than a failed run
+        self.app.delete(self.p, 'actions', tool[0][7:])
+        code, status, message = self.err(self.runtime_client().invoke_agent, agentId=agent_id, agentAliasId=alias['agentAliasId'], sessionId='sess-1', inputText='hi')
+        self.assertEqual((code, status), ('ConflictException', 409))
+        self.assertIn('action that no longer exists', message)
+
     def test_action_group_refusals_name_the_member(self):
         url, _ = self.stub({})
         agent_id = self.agent()['agentId']

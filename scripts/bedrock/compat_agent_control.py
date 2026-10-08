@@ -217,6 +217,22 @@ def body(env, report):
         return 'alias %s -> version 1' % fx['alias']
 
     report.run(SVC, 'PrepareAgent / Create, Get, List, UpdateAgentAlias / ListAgentVersions / GetAgentVersion', alias)
+    def invoke_by_alias():
+        if 'alias' not in fx:
+            raise Skip('no alias created')
+        rt = env.client('bedrock-agent-runtime')
+        ba.update_agent(agentId=agent_id, agentName='compat-agent2-' + suffix, foundationModel=fx['chat'], agentResourceRoleArn=ROLE,
+                        instruction='You answer in one word only, whatever you are asked. Never write more than one word.')
+
+        def versions_seen(alias):
+            out = rt.invoke_agent(agentId=agent_id, agentAliasId=alias, sessionId='compat-alias', inputText='Say hello', enableTrace=True)
+            return {e['trace']['agentVersion'] for e in out['completion'] if 'trace' in e}
+        eq(versions_seen(fx['alias']), {'1'}, 'alias runs its pinned version')
+        eq(versions_seen('TSTALIASID'), {'DRAFT'}, 'TSTALIASID runs the DRAFT')
+        expect_error(rt.invoke_agent, 'ResourceNotFoundException', 404, agentId=agent_id, agentAliasId='NOSUCHALIAS', sessionId='compat-alias', inputText='x')
+        return 'alias -> version 1, TSTALIASID -> DRAFT, unknown alias 404'
+
+    report.run('bedrock-agent-runtime', 'InvokeAgent honours the alias (pinned version vs DRAFT)', invoke_by_alias)
     report.run(SVC, 'DeleteAgentVersion (refused)', lambda: expect_error(ba.delete_agent_version, 'UnsupportedOperationException', 501, agentId=agent_id, agentVersion='1') and 'recorded route, 501')
 
     def tags():

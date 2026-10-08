@@ -107,6 +107,8 @@ def body(env, report):
         lambda: invoke(memoryId='m1'), 'ValidationException', 400) and 'refused')
     report.run(SVC, 'InvokeAgent (unknown agent -> 404)', lambda: expect_error(
         rt.invoke_agent, 'ResourceNotFoundException', 404, agentId='NOSUCHAGENT', agentAliasId='TSTALIASID', sessionId='s1', inputText='x') and '')
+    report.run(SVC, 'InvokeAgent (unknown alias -> 404)', lambda: expect_error(
+        rt.invoke_agent, 'ResourceNotFoundException', 404, agentId=fx['agent'], agentAliasId='NOSUCHALIAS', sessionId='s1', inputText='x') and '')
     report.run(SVC, 'GetAgentMemory (refused)', lambda: expect_error(
         rt.get_agent_memory, 'UnsupportedOperationException', 501, agentId=fx['agent'], agentAliasId='TSTALIASID', memoryId='m1', memoryType='SESSION_SUMMARY') and 'recorded route, 501')
 
