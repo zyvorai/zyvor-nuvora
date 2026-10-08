@@ -16,6 +16,7 @@ from .errors import BedrockError, new_request_id
 from .foundation import list_foundation_models
 from .router import Request, Response, Stream, default_router
 from .runtime import HANDLERS
+from . import agent_runtime
 
 BODY_LIMIT = 28 * 1024 * 1024
 FAILURE_LIMIT = 20
@@ -34,6 +35,8 @@ for _route in ROUTER.routes:
         _route.handler = list_foundation_models
     elif _route.operation in HANDLERS:
         _route.handler = HANDLERS[_route.operation]
+
+agent_runtime.register(ROUTER)
 
 
 def _under(path, roots):
