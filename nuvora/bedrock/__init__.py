@@ -15,6 +15,7 @@ from .credentials import Credentials
 from .errors import BedrockError, new_request_id
 from .foundation import list_foundation_models
 from .router import Request, Response, Stream, default_router
+from .runtime import HANDLERS
 
 BODY_LIMIT = 28 * 1024 * 1024
 FAILURE_LIMIT = 20
@@ -31,6 +32,8 @@ ROUTER = default_router()
 for _route in ROUTER.routes:
     if _route.operation == 'ListFoundationModels':
         _route.handler = list_foundation_models
+    elif _route.operation in HANDLERS:
+        _route.handler = HANDLERS[_route.operation]
 
 
 def _under(path, roots):
@@ -164,13 +167,13 @@ def _stream(handler, result, headers):
     except (BrokenPipeError, ConnectionResetError):
         getattr(frames, 'close', lambda: None)()
     except BedrockError as exc:
-        handler.wfile.write(eventstream.exception_event(exc.error_type, exc.message))
+        handler.wfile.write(eventstream.exception_event(errors.stream_exception(exc.error_type), exc.message))
     except Fault as exc:
         mapped = errors.from_fault(exc)
-        handler.wfile.write(eventstream.exception_event(mapped.error_type, mapped.message))
+        handler.wfile.write(eventstream.exception_event(errors.stream_exception(mapped.error_type), mapped.message))
     except Exception:
         traceback.print_exc()
-        handler.wfile.write(eventstream.exception_event('InternalServerException', 'Internal server error'))
+        handler.wfile.write(eventstream.exception_event('internalServerException', 'Internal server error'))
 
 
 def handle(handler, method, router=None):
