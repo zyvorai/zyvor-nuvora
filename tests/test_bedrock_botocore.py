@@ -43,11 +43,11 @@ class RealSdk(LiveServer):
 
     def test_signature_survives_colon_model_ids_and_every_service(self):
         # A model id with ':' is percent-encoded on the wire and double-encoded in the canonical request.
-        # Reaching the 501 (not an InvalidSignature) means the signature verified.
+        # Reaching the 404 (not an InvalidSignature) means the signature verified and the model id decoded.
         with self.assertRaises(ClientError) as ctx:
             self.client('bedrock-runtime').converse(modelId='anthropic.claude-3-5-sonnet-20240620-v1:0', messages=[{'role': 'user', 'content': [{'text': 'hi'}]}])
-        self.assertEqual(ctx.exception.response['Error']['Code'], 'UnsupportedOperationException')
-        self.assertEqual(ctx.exception.response['ResponseMetadata']['HTTPStatusCode'], 501)
+        self.assertEqual(ctx.exception.response['Error']['Code'], 'ResourceNotFoundException')
+        self.assertEqual(ctx.exception.response['ResponseMetadata']['HTTPStatusCode'], 404)
         with self.assertRaises(ClientError) as ctx:
             self.client('bedrock-agent-runtime').retrieve(knowledgeBaseId='ABCDEFGHIJ', retrievalQuery={'text': 'q'})
         self.assertEqual(ctx.exception.response['Error']['Code'], 'UnsupportedOperationException')

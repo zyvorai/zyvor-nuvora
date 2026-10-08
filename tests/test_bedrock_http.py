@@ -159,22 +159,22 @@ class BedrockHTTP(LiveServer):
 
     def test_body_tampering_and_payload_hash_modes(self):
         body = json.dumps({'messages': []}).encode()
-        sent = signed_headers(self.cred['access_key_id'], self.cred['secret_access_key'], 'POST', '/model/m1/converse', self.host, body, service='bedrock-runtime')
-        self.error(self.call('POST', '/model/m1/converse', b'{"messages":[1]}', headers=sent), 403, 'InvalidSignatureException')
-        message = self.error(self.call('POST', '/model/m1/converse', body, service='bedrock-runtime'), 501, 'UnsupportedOperationException')
-        self.assertIn('Converse', message)
+        sent = signed_headers(self.cred['access_key_id'], self.cred['secret_access_key'], 'POST', '/guardrail/g1/version/1/apply', self.host, body, service='bedrock-runtime')
+        self.error(self.call('POST', '/guardrail/g1/version/1/apply', b'{"messages":[1]}', headers=sent), 403, 'InvalidSignatureException')
+        message = self.error(self.call('POST', '/guardrail/g1/version/1/apply', body, service='bedrock-runtime'), 501, 'UnsupportedOperationException')
+        self.assertIn('ApplyGuardrail', message)
         digest = hashlib.sha256(body).hexdigest()
         extra = {'x-amz-content-sha256': digest}
-        sent = signed_headers(self.cred['access_key_id'], self.cred['secret_access_key'], 'POST', '/model/m1/converse', self.host, body, service='bedrock-runtime', extra=extra)
-        self.error(self.call('POST', '/model/m1/converse', b'{"messages":[2]}', headers=sent), 403, 'InvalidSignatureException')
-        self.error(self.call('POST', '/model/m1/converse', body, headers=sent), 501, 'UnsupportedOperationException')
+        sent = signed_headers(self.cred['access_key_id'], self.cred['secret_access_key'], 'POST', '/guardrail/g1/version/1/apply', self.host, body, service='bedrock-runtime', extra=extra)
+        self.error(self.call('POST', '/guardrail/g1/version/1/apply', b'{"messages":[2]}', headers=sent), 403, 'InvalidSignatureException')
+        self.error(self.call('POST', '/guardrail/g1/version/1/apply', body, headers=sent), 501, 'UnsupportedOperationException')
 
     def test_unknown_and_recognised_operations(self):
         self.assertIn('POST /guardrail/x/nope', self.error(self.call('POST', '/guardrail/x/nope'), 404, 'UnknownOperationException'))
         self.error(self.call('DELETE', '/foundation-models'), 404, 'UnknownOperationException')
-        self.error(self.call('GET', '/foundation-models/abc'), 501, 'UnsupportedOperationException')
-        message = self.error(self.call('POST', '/model/a%3Ab/converse-stream', b'{}', service='bedrock-runtime'), 501, 'UnsupportedOperationException')
-        self.assertIn('ConverseStream', message)
+        self.error(self.call('GET', '/inference-profiles/abc'), 501, 'UnsupportedOperationException')
+        message = self.error(self.call('POST', '/async-invoke', b'{}', service='bedrock-runtime'), 501, 'UnsupportedOperationException')
+        self.assertIn('StartAsyncInvoke', message)
         message = self.error(self.call('POST', '/knowledgebases/kb1/retrieve', b'{}', service='bedrock-agent-runtime'), 501, 'UnsupportedOperationException')
         self.assertIn('Retrieve', message)
 
@@ -236,7 +236,7 @@ class BedrockHTTP(LiveServer):
         code, raw, headers = self.call('POST', '/model/m1/test-stream', b'{}', service='bedrock-runtime')
         self.assertEqual((code, headers['content-type']), (200, 'application/vnd.amazon.eventstream'))
         frames = es.decode(raw)
-        self.assertEqual([h[':event-type'] if ':event-type' in h else h[':exception-type'] for h, _ in frames], ['messageStart', 'chunk', 'ModelStreamErrorException'])
+        self.assertEqual([h[':event-type'] if ':event-type' in h else h[':exception-type'] for h, _ in frames], ['messageStart', 'chunk', 'modelStreamErrorException'])
 
     def test_handler_receives_decoded_params_and_principal(self):
         seen = {}

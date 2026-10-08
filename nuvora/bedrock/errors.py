@@ -78,7 +78,21 @@ def from_fault(exc):
     kind = {400: 'ValidationException', 401: 'UnrecognizedClientException', 403: 'AccessDeniedException',
             404: 'ResourceNotFoundException', 409: 'ConflictException', 413: 'ValidationException',
             415: 'ValidationException', 422: 'ValidationException', 429: 'ThrottlingException',
-            503: 'ServiceUnavailableException'}.get(status)
+            502: 'ModelErrorException', 503: 'ServiceUnavailableException', 504: 'ModelTimeoutException'}.get(status)
     if kind is None:
         kind = 'InternalServerException' if status >= 500 else 'ValidationException'
     return BedrockError(kind, str(exc))
+
+
+# Exceptions the bedrock-runtime event streams model; anything else is folded into the nearest one.
+STREAM_EXCEPTIONS = {'InternalServerException', 'ModelStreamErrorException', 'ValidationException', 'ThrottlingException', 'ServiceUnavailableException'}
+STREAM_FOLD = {'ModelErrorException': 'ModelStreamErrorException', 'ModelTimeoutException': 'ModelStreamErrorException',
+               'AccessDeniedException': 'ValidationException', 'ResourceNotFoundException': 'ValidationException', 'ConflictException': 'ValidationException'}
+
+
+def stream_exception(error_type):
+    """The `:exception-type` header value for a failure after a stream started (lowerCamelCase, as SDKs expect)."""
+    kind = STREAM_FOLD.get(error_type, error_type)
+    if kind not in STREAM_EXCEPTIONS:
+        kind = 'InternalServerException'
+    return kind[0].lower() + kind[1:]
