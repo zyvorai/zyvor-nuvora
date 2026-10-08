@@ -388,7 +388,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.respond(200,{'baseline_score':a['result']['score'],'candidate_score':b['result']['score'],'delta':b['result']['score']-a['result']['score'],'release_allowed':b['result']['release_allowed'] and b['result']['score']>=a['result']['score']})
                 return
             if path=='/api/retrieve' and method=='POST':
-                self.respond(200,{'citations':app.retrieve(p,body.get('knowledge_ids',[]),body.get('query',''),body.get('top_k',5),body.get('filter'))})
+                self.respond(200,app.retrieve_page(p,body.get('knowledge_ids',[]),body.get('query',''),body.get('top_k',5),body.get('filter'),body.get('maxResults'),body.get('nextToken')))
                 return
             if path=='/api/actions/import-openapi' and method=='POST':
                 self.respond(201,app.import_openapi(p,body))
@@ -411,8 +411,19 @@ class Handler(BaseHTTPRequestHandler):
                 kind=parts[1]
                 id=parts[2] if len(parts)>2 else None
                 if len(parts)==4 and method=='GET' and kind=='knowledge' and parts[3]=='documents':
-                    self.respond(200,{'items':app.documents(p,id)})
+                    q=self.query()
+                    self.respond(200,app.documents_page(p,id,q.get('maxResults'),q.get('nextToken')))
                     return
+                if kind=='knowledge' and id and len(parts)>=4 and parts[3]=='ingestion-jobs':
+                    q=self.query()
+                    if len(parts)==4 and method=='GET':
+                        self.respond(200,app.ingestion_jobs(p,id,q.get('maxResults'),q.get('nextToken'))); return
+                    if len(parts)==4 and method=='POST':
+                        job=app.new_job(p,'ingestion',id,body,self.headers.get('Idempotency-Key') or (body.get('clientToken') if isinstance(body.get('clientToken'),str) else None))
+                        self.respond(202,app.ingestion_view(job)); return
+                    if len(parts)==5 and method=='GET':
+                        self.respond(200,app.ingestion_job(p,id,parts[4])); return
+                    raise Fault('Not found',404)
                 if len(parts)==4 and method=='GET' and parts[3]=='versions':
                     app.get(p,kind,id)
                     self.respond(200,{'items':[v for v in app.store.list(p['tenant'],'versions') if v['collection']==kind and v['resource_id']==id]})
@@ -445,7 +456,11 @@ class Handler(BaseHTTPRequestHandler):
                 if len(parts)>3:
                     raise Fault('Not found',404)
                 if method=='GET':
-                    self.respond(200,app.get(p,kind,id) if id else {'items':app.list(p,kind)})
+                    q=self.query()
+                    if id and kind=='knowledge':
+                        self.respond(200,next(k for k in app.knowledge_view([app.get(p,kind,id)],p['tenant'])))
+                    else:
+                        self.respond(200,app.get(p,kind,id) if id else app.list_page(p,kind,q.get('maxResults'),q.get('nextToken')))
                 elif method=='POST':
                     self.respond(201,app.create(p,kind,body,id))
                 elif method=='DELETE' and kind=='documents' and id:

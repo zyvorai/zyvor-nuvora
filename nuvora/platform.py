@@ -13,7 +13,7 @@ from .store import canonical
 from .security import CLASSIFIER_CATEGORIES, Fault, guard, require, validate_policy
 from .providers import DATA_IMAGE, Providers, text_of
 from .retrieval import chunks, search
-from . import actions, connectors, datasets, mcp_client, telemetry
+from . import actions, connectors, datasets, mcp_client, pagination, telemetry
 from . import ingest as parsers
 from .integrations import Integrations, TOOLS as INTEGRATION_TOOLS
 
@@ -528,6 +528,133 @@ class Platform:
         self.get(p,'knowledge',kb_id)
         return [{**{k:v for k,v in d.items() if k not in ('text','chunks')},'chunks':len(d.get('chunks',[]))}
                 for d in self.list(p,'documents') if d['knowledge_id']==kb_id]
+
+    INGESTION_STATUS={'queued':'STARTING','running':'IN_PROGRESS','completed':'COMPLETE','failed':'FAILED','interrupted':'FAILED'}
+    INGESTION_COUNTS=('scanned','new','modified','unchanged','deleted','failed')
+
+    def ingestion_input(self,p,kb_id,body):
+        """Validate a StartIngestionJob-style body: source text | documents | connector."""
+        if not isinstance(body,dict):
+            raise Fault('Body must be an object')
+        source=body.get('source','documents' if 'documents' in body else 'connector' if 'connector_id' in body else 'text')
+        out={'source':source}
+        if body.get('description') is not None:
+            if not isinstance(body['description'],str) or len(body['description'])>200:
+                raise Fault('description must be a string of at most 200 characters')
+            out['description']=body['description']
+        if source=='connector':
+            require(p,'admin')
+            spec=self.get(p,'connectors',body.get('connector_id',''))
+            if spec['knowledge_id']!=kb_id:
+                raise Fault('Connector feeds a different knowledge base')
+            out['connector_id']=spec['id']
+            return out
+        if source=='text':
+            items=[{k:body[k] for k in ('name','text','metadata','groups','chunk_size','overlap','content_type') if k in body}]
+        elif source=='documents':
+            items=body.get('documents')
+        else:
+            raise Fault('source must be text, documents or connector')
+        if not isinstance(items,list) or not 1<=len(items)<=100 or not all(isinstance(i,dict) for i in items):
+            raise Fault('Provide 1–100 documents')
+        for item in items:
+            if ('text' in item)==('content_base64' in item):
+                raise Fault('Each document needs either text or content_base64')
+        if len(canonical(items))>25*1024*1024:
+            raise Fault('Ingestion payload too large',413)
+        out['documents']=items
+        return out
+
+    def run_ingestion(self,p,job):
+        kb_id=job['target']
+        stats=dict.fromkeys(self.INGESTION_COUNTS,0)
+        failures=[]
+        inp=job['input']
+        if inp['source']=='connector':
+            sync=self.run_sync(p,{'target':inp['connector_id']})
+            stats.update(scanned=sync['seen'],new=sync['added'],modified=sync['updated'],unchanged=sync['unchanged'],deleted=sync['removed'],failed=len(sync['failed']))
+            failures=[f"{f['item']}: {f['reason']}" for f in sync['failed']]
+        else:
+            for n,item in enumerate(inp['documents']):
+                stats['scanned']+=1
+                name=item.get('name') or f'Untitled {n+1}'
+                try:
+                    old=next((d for d in self.store.list(p['tenant'],'documents') if d['knowledge_id']==kb_id and d['name']==name),None)
+                    doc=self.upload(p,kb_id,item) if 'content_base64' in item else self.ingest(p,kb_id,{**item,'name':name,'source':item.get('source','ingestion')})
+                    stats['new' if old is None else 'unchanged' if old['digest']==doc['digest'] else 'modified']+=1
+                except (Fault,KeyError,ValueError,TypeError) as exc:
+                    stats['failed']+=1
+                    failures.append(f'{name}: {exc if isinstance(exc,Fault) else "invalid document"}'[:300])
+        failures=failures[:50]
+        if stats['scanned'] and stats['failed']==stats['scanned']:
+            job['status']='failed'
+            job['error']='Every document failed'
+        return {'statistics':stats,'failure_reasons':failures}
+
+    def ingestion_view(self,job):
+        result=job.get('result') or {}
+        reasons=list(result.get('failure_reasons',[]))
+        if job.get('error') and job['error'] not in reasons:
+            reasons.insert(0,job['error'])
+        stats=result.get('statistics') or dict.fromkeys(self.INGESTION_COUNTS,0)
+        return {'id':job['id'],'knowledge_id':job['target'],'status':self.INGESTION_STATUS.get(job['status'],'IN_PROGRESS'),
+                'source':job['input'].get('source'),**({'description':job['input']['description']} if job['input'].get('description') else {}),
+                'statistics':{'documents_'+k:stats.get(k,0) for k in self.INGESTION_COUNTS},'failure_reasons':reasons,
+                'created':job['created'],'started':job.get('started'),'finished':job.get('finished'),'updated':job['updated']}
+
+    def ingestion_jobs(self,p,kb_id,max_results=None,token=None):
+        self.get(p,'knowledge',kb_id)
+        jobs=[j for j in self.list(p,'jobs') if j['type']=='ingestion' and j['target']==kb_id]
+        chosen,nxt=pagination.page(jobs,max_results,token)
+        return {'items':[self.ingestion_view(j) for j in chosen],**({'nextToken':nxt} if nxt else {})}
+
+    def ingestion_job(self,p,kb_id,job_id):
+        self.get(p,'knowledge',kb_id)
+        job=self.get(p,'jobs',job_id)
+        if job['type']!='ingestion' or job['target']!=kb_id:
+            raise KeyError(job_id)
+        return self.ingestion_view(job)
+
+    def knowledge_view(self,kbs,tenant):
+        """Add a computed `status`: UPDATING while an ingestion job runs, FAILED when the latest finished one failed, else ACTIVE."""
+        latest={}
+        for j in sorted((j for j in self.store.list(tenant,'jobs') if j['type']=='ingestion'),key=lambda j:j['created']):
+            latest[j['target']]=j
+        def status(kb):
+            j=latest.get(kb['id'])
+            if j is None or j['status']=='completed':
+                return 'ACTIVE'
+            return 'UPDATING' if j['status'] in ('queued','running') else 'FAILED'
+        return [{**kb,'status':status(kb)} for kb in kbs]
+
+    def list_page(self,p,kind,max_results=None,token=None):
+        items=self.list(p,kind)
+        if kind=='knowledge':
+            items=self.knowledge_view(items,p['tenant'])
+        chosen,nxt=pagination.page(items,max_results,token)
+        return {'items':chosen,**({'nextToken':nxt} if nxt else {})}
+
+    def documents_page(self,p,kb_id,max_results=None,token=None):
+        chosen,nxt=pagination.page(self.documents(p,kb_id),max_results,token)
+        return {'items':chosen,**({'nextToken':nxt} if nxt else {})}
+
+    def retrieve_page(self,p,kb_ids,query,top_k=5,filter=None,max_results=None,token=None):
+        """Ranked evidence in pages of maxResults; the token pins the query so a page cannot be mixed with another search."""
+        size=pagination.limit(max_results)
+        if size is None and not token:
+            return {'citations':self.retrieve(p,kb_ids,query,top_k,filter)}
+        size=size or top_k
+        fingerprint=hashlib.sha256(canonical([sorted(kb_ids) if isinstance(kb_ids,list) else kb_ids,query,filter,top_k]).encode()).hexdigest()[:16]
+        offset=0
+        if token:
+            cursor=pagination.decode(token)
+            if cursor.get('q')!=fingerprint or not isinstance(cursor.get('o'),int) or cursor['o']<0:
+                raise Fault('nextToken does not belong to this search')
+            offset=cursor['o']
+        ranked=self.retrieve(p,kb_ids,query,top_k,filter)
+        chosen=ranked[offset:offset+size]
+        more=offset+size<len(ranked)
+        return {'citations':chosen,**({'nextToken':pagination.encode({'q':fingerprint,'o':offset+size})} if more else {})}
 
     def delete_document(self,p,id):
         require(p,'developer','admin')
@@ -1072,9 +1199,9 @@ class Platform:
 
     def new_job(self,p,kind,target,body,idempotency=None):
         require(p,'developer','admin')
-        if kind not in ('agent','workflow','evaluation','batch','experiment','extract','sync','training'):
+        if kind not in ('agent','workflow','evaluation','batch','experiment','extract','sync','training','ingestion'):
             raise Fault('Unknown job type')
-        collection={'agent':'agents','workflow':'workflows','evaluation':'evaluations','experiment':'prompts','sync':'connectors','training':'recipes'}.get(kind)
+        collection={'agent':'agents','workflow':'workflows','evaluation':'evaluations','experiment':'prompts','sync':'connectors','training':'recipes','ingestion':'knowledge'}.get(kind)
         if kind in ('sync','training'):
             require(p,'admin')
         if kind=='training':
@@ -1084,6 +1211,9 @@ class Platform:
             if not self.integrations.configured('trainer'):
                 raise Fault('No trainer is configured; set NUVORA_TRAINER_URL or export the recipe',503)
         spec=self.get(p,collection,target) if collection else None
+        if kind=='ingestion':
+            body=self.ingestion_input(p,target,body)
+            spec={'id':target}
         if kind=='experiment':
             if not spec.get('variants'):
                 raise Fault('Add at least one variant before running an experiment')
@@ -1110,6 +1240,8 @@ class Platform:
                     if old['fingerprint']!=fingerprint:
                         raise Fault('Idempotency key reused for different request',409)
                     return self.get(p,'jobs',json.loads(old['value'])['id'])
+            if kind=='ingestion' and any(j['type']=='ingestion' and j['target']==target and j['status'] in ('queued','running') for j in self.store.list(p['tenant'],'jobs')):
+                raise Fault('An ingestion job is already running for this knowledge base',409)
             job=self.store.put(p['tenant'],'jobs',{'name':kind+' run','type':kind,'target':target,'spec':spec,'input':stored,'principal':p,'status':'queued','checkpoint':{},'trace':[],'result':None})
             if idempotency:
                 self.store.db.execute('INSERT INTO idempotency (tenant,key,fingerprint,value) VALUES (?,?,?,?)',(p['tenant'],idempotency,fingerprint,canonical({'id':job['id']})))
@@ -1790,6 +1922,8 @@ class Platform:
                     result=self.run_extraction(p,job)
                 elif job['type']=='sync':
                     result=self.run_sync(p,job)
+                elif job['type']=='ingestion':
+                    result=self.run_ingestion(p,job)
                 elif job['type']=='training':
                     result=self.run_training(p,job)
                 else:
