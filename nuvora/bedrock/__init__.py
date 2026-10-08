@@ -11,6 +11,7 @@ from urllib.parse import parse_qsl, urlsplit
 
 from ..security import Fault
 from . import errors, eventstream, sigv4
+from .control import install as install_control
 from .credentials import Credentials
 from .errors import BedrockError, new_request_id
 from .foundation import list_foundation_models
@@ -23,7 +24,7 @@ FAILURE_LIMIT = 20
 FAILURE_WINDOW = 300
 # Roots only Bedrock uses: matched even without credentials so the caller gets a Bedrock error.
 EXCLUSIVE_ROOTS = ('/model', '/guardrail', '/foundation-models', '/inference-profiles', '/async-invoke', '/retrieveAndGenerate',
-                   '/model-customization-jobs', '/evaluation-jobs', '/logging/modelinvocations', '/listTagsForResource',
+                   '/model-customization-jobs', '/evaluation-jobs', '/evaluation-job', '/logging/modelinvocations', '/listTagsForResource',
                    '/tagResource', '/untagResource')
 # Roots the web console could also serve: Bedrock only when the request carries credentials.
 SHARED_ROOTS = ('/agents', '/knowledgebases', '/guardrails', '/flows')
@@ -35,6 +36,7 @@ for _route in ROUTER.routes:
         _route.handler = list_foundation_models
     elif _route.operation in HANDLERS:
         _route.handler = HANDLERS[_route.operation]
+install_control(ROUTER)
 
 agent_runtime.register(ROUTER)
 

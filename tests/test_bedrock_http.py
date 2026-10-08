@@ -173,7 +173,7 @@ class BedrockHTTP(LiveServer):
     def test_unknown_and_recognised_operations(self):
         self.assertIn('POST /guardrail/x/nope', self.error(self.call('POST', '/guardrail/x/nope'), 404, 'UnknownOperationException'))
         self.error(self.call('DELETE', '/foundation-models'), 404, 'UnknownOperationException')
-        self.error(self.call('GET', '/inference-profiles/abc'), 501, 'UnsupportedOperationException')
+        self.assertIn('CreateInferenceProfile', self.error(self.call('POST', '/inference-profiles', b'{}'), 501, 'UnsupportedOperationException'))
         message = self.error(self.call('POST', '/async-invoke', b'{}', service='bedrock-runtime'), 501, 'UnsupportedOperationException')
         self.assertIn('StartAsyncInvoke', message)
         message = self.error(self.call('POST', '/flows/f1/aliases/a1', b'{}', service='bedrock-agent-runtime'), 501, 'UnsupportedOperationException')
