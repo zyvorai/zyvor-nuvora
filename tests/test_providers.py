@@ -58,7 +58,10 @@ class ProviderTests(unittest.TestCase):
         with self.assertRaises(Fault):post_json(self.url+'/redirect',{}, {},{'127.0.0.1'})
     def test_missing_secret(self):
         with self.assertRaises(Fault):self.providers.chat({**self.model(),'key_env':'NUVORA_SECRET_MISSING'},[{'role':'user','content':'hello'}])
-    def test_ollama_tools_explicitly_refused(self):
-        with self.assertRaises(Fault):self.providers.chat(self.model('ollama'),[{'role':'user','content':'hello'}],[{'type':'function'}])
+    def test_ollama_forced_tool_choice_explicitly_refused(self):
+        tools=[{'type':'function','function':{'name':'f'}}]
+        with self.assertRaises(Fault) as cm:self.providers.chat(self.model('ollama'),[{'role':'user','content':'hello'}],tools,opts={'tool_choice':'required'})
+        self.assertEqual(cm.exception.status,422)
+        self.assertIn('tool_choice',str(cm.exception))
 
 if __name__=='__main__':unittest.main()

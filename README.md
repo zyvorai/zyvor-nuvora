@@ -131,7 +131,7 @@ The [capability map](docs/COMPARISON.md) lists what's included and what isn't. I
 ## Release status
 
 > **0.3.0 is an evaluation release, not a production certification.**
-> - Model calls work against configured OpenAI-compatible or Ollama endpoints. The optional AWS adapter (boto3, Converse and streaming) has no tool calling and hasn't been validated against a live account.
+> - Model calls work against configured OpenAI-compatible or Ollama endpoints. The optional AWS adapter (boto3, Converse and streaming) supports tool use in tests with a mocked client and hasn't been validated against a live account.
 > - The bundled offline model is synthetic.
 > - Guardrails v2, routers, MCP tools, connectors, OCR, training and images are new in 0.3.0. They're tested against stubs and the offline model, not against every provider, trainer or source system.
 > - Nuvora calls your trainer and your image model. It doesn't host GPUs or models. Multi-region HA isn't implemented.
