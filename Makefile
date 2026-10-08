@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
-.PHONY: test web check run package spdx
+.PHONY: test web check run package spdx bedrock-compat
 
 test:
 	python3 -m unittest discover -s tests -v
@@ -18,3 +18,6 @@ run:
 
 package:
 	python3 -m pip wheel --no-deps . -w dist
+
+bedrock-compat:
+	scripts/bedrock/run-compat.sh

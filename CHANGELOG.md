@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Bedrock compatibility suite and guide:** `docs/BEDROCK.md` is the one guide to the Bedrock-compatible API (what it is and is not, `NUVORA_SECRET_KEY` and credential setup, boto3 and `aws` CLI examples, an operation table per service marked real / recorded / refused, roles, ARN scheme, known differences, verification record). `scripts/bedrock/` adds four boto3 scripts (`compat_runtime.py`, `compat_agent_runtime.py`, `compat_control.py`, `compat_agent_control.py`) that make throwaway resources against a running Nuvora, clean up, print a PASS/FAIL/SKIP table and refuse `*.amazonaws.com`, and `run-compat.sh`, which starts a local Nuvora on a free port and runs them all. CI has a `bedrock-compat` job (boto3, Python 3.12). README now separates the inbound Bedrock-compatible API from the outbound `aws` provider, which stays unvalidated against a live account.
+
 
 - **Guardrails as resources:** `/api/guardrails` objects with a DRAFT working copy and immutable numbered versions (`POST /api/guardrails/{id}/versions`), separate input and output policies, per-filter strengths (NONE/LOW/MEDIUM/HIGH, mapped onto the existing classifier and grounding thresholds, documented in `docs/API.md`) and custom blocked messages. Chat, streaming, `/v1/chat/completions`, `/api/answer` and agent runs accept `guardrail: {id, version}`; without it the tenant default policy applies unchanged. `POST /api/guardrails/{id}/apply` applies a version to INPUT or OUTPUT text without a model call and returns the action, outputs and per-policy findings; `/api/guardrails/check` is unchanged. Admin-only writes, audited. Tested with stub models only.
 
