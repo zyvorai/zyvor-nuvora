@@ -12,14 +12,14 @@ import secrets
 
 from ..security import Fault, require
 from ..store import canonical
-from . import errors, eventstream as es
+from . import errors, eventstream as es, guardrail as gr
 from .router import Response, Stream
 
 REFUSAL_TEXT = 'The request or the response was blocked by the tenant guardrail policy.'
 IMAGE_FORMATS = {'png': 'image/png', 'jpeg': 'image/jpeg', 'webp': 'image/webp'}
 CONVERSE_FIELDS = {'messages', 'system', 'inferenceConfig', 'toolConfig', 'guardrailConfig', 'additionalModelRequestFields',
                    'additionalModelResponseFieldPaths', 'promptVariables', 'requestMetadata', 'performanceConfig', 'serviceTier'}
-UNSUPPORTED_CONVERSE = ('guardrailConfig', 'additionalModelRequestFields', 'additionalModelResponseFieldPaths', 'promptVariables',
+UNSUPPORTED_CONVERSE = ('additionalModelRequestFields', 'additionalModelResponseFieldPaths', 'promptVariables',
                         'requestMetadata', 'performanceConfig', 'serviceTier')
 ANTHROPIC_VERSION = 'bedrock-2023-05-31'
 
@@ -217,8 +217,7 @@ def converse_to_chat(request, model_value):
     _check_keys(request, CONVERSE_FIELDS, 'request')
     for name in UNSUPPORTED_CONVERSE:
         if request.get(name) not in (None, {}, []):
-            hint = ' (guardrails are applied from the tenant policy; per-request guardrails arrive with the guardrail resources)' if name == 'guardrailConfig' else ''
-            raise errors.validation(f'{name} is not supported by this Nuvora release{hint}')
+            raise errors.validation(f'{name} is not supported by this Nuvora release')
     messages = []
     system = request.get('system')
     if system is not None:
@@ -253,8 +252,11 @@ def stop_reason(calls, completion_tokens, max_tokens):
     return 'max_tokens' if max_tokens and completion_tokens >= max_tokens else 'end_turn'
 
 
-def _refusal(exc):
-    return exc.status == 422 and 'refused by guardrail' in str(exc)
+def _refusal(exc, use=None):
+    """The text a guardrail refusal is reported with, or None when `exc` is not a refusal."""
+    if use is not None:
+        return use.refusal_text(exc)
+    return REFUSAL_TEXT if exc.status == 422 and 'refused by guardrail' in str(exc) else None
 
 
 def _usage(result):
@@ -279,13 +281,20 @@ def converse(req):
     request = req.json()
     value, record, is_router = resolve(req, req.params['modelId'])
     body = converse_to_chat(request, value)
+    use = gr.config_from_converse(req, request.get('guardrailConfig'), False)
+    if use:
+        body['guardrail'] = use.ref
     try:
         result = req.app.chat(req.principal, body)
     except Fault as exc:
-        if not _refusal(exc):
+        text = _refusal(exc, use)
+        if text is None:
             raise
-        return Response({'output': {'message': {'role': 'assistant', 'content': [{'text': REFUSAL_TEXT}]}}, 'stopReason': 'guardrail_intervened',
-                         'usage': {'inputTokens': 0, 'outputTokens': 0, 'totalTokens': 0}, 'metrics': {'latencyMs': 0}})
+        out = {'output': {'message': {'role': 'assistant', 'content': [{'text': text}]}}, 'stopReason': 'guardrail_intervened',
+               'usage': {'inputTokens': 0, 'outputTokens': 0, 'totalTokens': 0}, 'metrics': {'latencyMs': 0}}
+        if use and use.tracing:
+            out['trace'] = {'guardrail': use.trace_block(gr.chat_texts(body))}
+        return Response(out)
     calls = result.get('tool_calls') or []
     content = ([{'text': result['content']}] if result['content'] else []) + _tool_use_blocks(calls)
     reason = stop_reason(calls, result['usage'].get('completion_tokens', 0), body.get('max_tokens', 1024))
@@ -296,8 +305,8 @@ def converse(req):
 
 # ---- streaming --------------------------------------------------------------------------
 
-def neutral(events):
-    """Platform stream events to ('text', s) | ('calls', [...]) | ('refused',) | ('done', info). A mid-stream
+def neutral(events, use=None):
+    """Platform stream events to ('text', s) | ('calls', [...]) | ('refused', text) | ('done', info). A mid-stream
     guardrail refusal ends the stream cleanly; any other Fault propagates (an exception frame)."""
     try:
         for item in events:
@@ -309,17 +318,18 @@ def neutral(events):
             elif kind == 'done':
                 yield 'done', item
     except Fault as exc:
-        if not _refusal(exc):
+        text = _refusal(exc, use)
+        if text is None:
             raise
-        yield 'refused', None
+        yield 'refused', text
     finally:
         events.close()
 
 
-def converse_frames(events, max_tokens):
+def converse_frames(events, max_tokens, use=None, texts=()):
     j = es.json_event
     yield j('messageStart', {'role': 'assistant'})
-    index, open_text, reason, info, calls_seen = -1, False, 'end_turn', {}, False
+    index, open_text, reason, info, calls_seen, refused = -1, False, 'end_turn', {}, False, False
     for kind, value in events:
         if kind == 'text':
             if not open_text:
@@ -339,8 +349,8 @@ def converse_frames(events, max_tokens):
         elif kind == 'refused':
             if not open_text:
                 index, open_text = index + 1, True
-            yield j('contentBlockDelta', {'contentBlockIndex': index, 'delta': {'text': REFUSAL_TEXT}})
-            reason = 'guardrail_intervened'
+            yield j('contentBlockDelta', {'contentBlockIndex': index, 'delta': {'text': value or REFUSAL_TEXT}})
+            reason, refused = 'guardrail_intervened', True
         else:
             info = value
     if open_text:
@@ -348,7 +358,10 @@ def converse_frames(events, max_tokens):
     if reason != 'guardrail_intervened':
         reason = stop_reason(calls_seen, (info.get('usage') or {}).get('completion_tokens', 0), max_tokens)
     yield j('messageStop', {'stopReason': reason})
-    yield j('metadata', {'usage': _usage(info), 'metrics': {'latencyMs': int(info.get('latency_ms', 0))}})
+    metadata = {'usage': _usage(info), 'metrics': {'latencyMs': int(info.get('latency_ms', 0))}}
+    if refused and use and use.tracing:
+        metadata['trace'] = {'guardrail': use.trace_block(texts)}
+    yield j('metadata', metadata)
 
 
 def converse_stream(req):
@@ -356,13 +369,18 @@ def converse_stream(req):
     request = req.json()
     value, record, is_router = resolve(req, req.params['modelId'])
     body = converse_to_chat(request, value)
+    use = gr.config_from_converse(req, request.get('guardrailConfig'), True)
+    if use:
+        body['guardrail'] = use.ref
+    texts = gr.chat_texts(body) if use and use.tracing else ()
     try:
         events = req.app.open_stream(req.principal, body)
     except Fault as exc:  # input refused before anything was generated: still a well-formed stream
-        if not _refusal(exc):
+        text = _refusal(exc, use)
+        if text is None:
             raise
-        return Stream(converse_frames(iter([('refused', None)]), 0))
-    return Stream(converse_frames(neutral(events), body.get('max_tokens', 1024)))
+        return Stream(converse_frames(iter([('refused', text)]), 0, use, texts))
+    return Stream(converse_frames(neutral(events, use), body.get('max_tokens', 1024), use, texts))
 
 
 # ---- InvokeModel ------------------------------------------------------------------------
@@ -373,7 +391,7 @@ ANTHROPIC_FIELDS = ('anthropic_version', 'max_tokens', 'messages', 'system', 'te
 
 def _invoke_headers(req):
     h = req.handler.headers
-    for name in ('X-Amzn-Bedrock-GuardrailIdentifier', 'X-Amzn-Bedrock-GuardrailVersion', 'X-Amzn-Bedrock-PerformanceConfig-Latency', 'X-Amzn-Bedrock-Trace'):
+    for name in ('X-Amzn-Bedrock-PerformanceConfig-Latency',):
         if h.get(name):
             raise errors.validation(f'The {name} header is not supported by this Nuvora release')
     ctype = (h.get('Content-Type') or 'application/json').split(';')[0].strip().lower()
@@ -519,14 +537,26 @@ def invoke(req):
     require(req.principal, 'developer', 'admin')
     _invoke_headers(req)
     value, record, is_router = resolve(req, req.params['modelId'], ('chat', 'embedding'))
+    use = gr.config_from_headers(req)
     body = req.json()
     if not is_router and record.get('capability') == 'embedding':
+        if use:
+            raise errors.validation('Guardrails do not apply to embedding models')
         return _embedding(req, record, body)
     if 'inputText' in body:
         raise errors.validation('inputText is an embeddings body; this model is a chat model')
     anthropic = _is_anthropic(body)
     chat = (anthropic_to_chat if anthropic else openai_to_chat)(body, value)
-    result = req.app.chat(req.principal, chat)
+    intervened = False
+    if use:
+        chat['guardrail'] = use.ref
+    try:
+        result = req.app.chat(req.principal, chat)
+    except Fault as exc:
+        text = _refusal(exc, use) if use else None
+        if text is None:
+            raise
+        intervened, result = True, {'content': text, 'tool_calls': [], 'usage': {'prompt_tokens': 0, 'completion_tokens': 0}, 'model': value}
     calls = result.get('tool_calls') or []
     reason = stop_reason(calls, result['usage'].get('completion_tokens', 0), chat.get('max_tokens', 1024))
     if anthropic:
@@ -539,10 +569,14 @@ def invoke(req):
         payload = {'id': 'chatcmpl-' + secrets.token_hex(12), 'object': 'chat.completion', 'model': result['model'],
                    'choices': [{'index': 0, 'message': message, 'finish_reason': 'tool_calls' if calls else 'length' if reason == 'max_tokens' else 'stop'}],
                    'usage': result['usage'], 'nuvora': {'evidence_class': result.get('evidence_class'), 'cached': result.get('cached'), 'cost': result.get('cost')}}
+    if use:
+        payload['amazon-bedrock-guardrailAction'] = 'INTERVENED' if intervened else 'NONE'
+        if intervened and use.tracing:
+            payload['amazon-bedrock-trace'] = {'guardrail': use.trace_block(gr.chat_texts(chat))}
     return _invoke_response(body, payload, result)
 
 
-def _anthropic_events(events, model, max_tokens):
+def _anthropic_events(events, model, max_tokens, extra=lambda: {}):
     yield {'type': 'message_start', 'message': {'id': 'msg_' + secrets.token_hex(12), 'type': 'message', 'role': 'assistant', 'model': model, 'content': [],
                                                 'stop_reason': None, 'stop_sequence': None, 'usage': {'input_tokens': 0, 'output_tokens': 0}}}
     index, open_text, calls_seen, info = -1, False, False, {}
@@ -571,13 +605,13 @@ def _anthropic_events(events, model, max_tokens):
     yield {'type': 'message_delta', 'delta': {'stop_reason': stop_reason(calls_seen, usage.get('completion_tokens', 0), max_tokens), 'stop_sequence': None},
            'usage': {'output_tokens': usage.get('completion_tokens', 0)}}
     yield {'type': 'message_stop', 'amazon-bedrock-invocationMetrics': {'inputTokenCount': usage.get('prompt_tokens', 0), 'outputTokenCount': usage.get('completion_tokens', 0),
-                                                                          'invocationLatency': int(info.get('latency_ms', 0))}}
+                                                                          'invocationLatency': int(info.get('latency_ms', 0))}, **extra()}
 
 
-def _openai_events(events, model, max_tokens):
+def _openai_events(events, model, max_tokens, extra=lambda: {}):
     head = {'id': 'chatcmpl-' + secrets.token_hex(12), 'object': 'chat.completion.chunk', 'model': model}
     yield {**head, 'choices': [{'index': 0, 'delta': {'role': 'assistant', 'content': ''}, 'finish_reason': None}]}
-    calls_seen = False
+    calls_seen, finished = False, False
     for kind, value in events:
         if kind == 'text':
             yield {**head, 'choices': [{'index': 0, 'delta': {'content': value}, 'finish_reason': None}]}
@@ -585,9 +619,12 @@ def _openai_events(events, model, max_tokens):
             calls_seen = True
             yield {**head, 'choices': [{'index': 0, 'delta': {'tool_calls': [{'index': i, **c} for i, c in enumerate(value)]}, 'finish_reason': None}]}
         elif kind == 'done':
+            finished = True
             reason = stop_reason(calls_seen, (value.get('usage') or {}).get('completion_tokens', 0), max_tokens)
             yield {**head, 'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'tool_calls' if calls_seen else 'length' if reason == 'max_tokens' else 'stop'}],
-                   'usage': value.get('usage', {}), 'nuvora': {'evidence_class': value.get('evidence_class'), 'cached': value.get('cached'), 'cost': value.get('cost')}}
+                   'usage': value.get('usage', {}), 'nuvora': {'evidence_class': value.get('evidence_class'), 'cached': value.get('cached'), 'cost': value.get('cost')}, **extra()}
+    if not finished:  # a guardrail ended the stream before the provider's final chunk
+        yield {**head, 'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'stop'}], 'usage': {}, **extra()}
 
 
 def _refusal_stops(events):
@@ -598,22 +635,54 @@ def _refusal_stops(events):
         yield kind, value
 
 
+def _guarded_stream(events, state):
+    """Explicit-guardrail streams report a refusal as the blocked message plus `amazon-bedrock-guardrailAction`."""
+    for kind, value in events:
+        if kind == 'refused':
+            state['intervened'] = True
+            yield 'text', value
+        else:
+            yield kind, value
+
+
 def invoke_stream(req):
     require(req.principal, 'developer', 'admin')
     _invoke_headers(req)
     value, record, is_router = resolve(req, req.params['modelId'], ('chat', 'embedding'))
     if not is_router and record.get('capability') == 'embedding':
         raise errors.validation('Embedding models do not stream; use InvokeModel')
+    use = gr.config_from_headers(req)
     body = req.json()
     anthropic = _is_anthropic(body)
     chat = (anthropic_to_chat if anthropic else openai_to_chat)(body, value)
-    events = req.app.open_stream(req.principal, chat)
+    state = {'intervened': False}
+    if use:
+        chat['guardrail'] = use.ref
+    refused_at_open = None
+    try:
+        raw = req.app.open_stream(req.principal, chat)
+    except Fault as exc:  # input refused by an explicit guardrail: a well-formed intervened stream
+        refused_at_open = _refusal(exc, use) if use else None
+        if refused_at_open is None:
+            raise
     maximum = chat.get('max_tokens', 1024)
     shape = _anthropic_events if anthropic else _openai_events
     name = value
 
+    def extra():
+        if not use:
+            return {}
+        out = {'amazon-bedrock-guardrailAction': 'INTERVENED' if state['intervened'] else 'NONE'}
+        if state['intervened'] and use.tracing:
+            out['amazon-bedrock-trace'] = {'guardrail': use.trace_block(gr.chat_texts(chat))}
+        return out
+
     def frames():
-        for payload in shape(_refusal_stops(neutral(events)), name, maximum):
+        if not use:
+            source = _refusal_stops(neutral(raw))
+        else:
+            source = _guarded_stream(iter([('refused', refused_at_open)]) if refused_at_open is not None else neutral(raw, use), state)
+        for payload in shape(source, name, maximum, extra):
             yield es.chunk_event(json.dumps(payload, separators=(',', ':')))
     return Stream(frames())
 
@@ -644,6 +713,8 @@ def count_tokens(req):
         raise errors.validation('input must hold exactly one of converse, invokeModel')
     (kind, spec), = source.items()
     if kind == 'converse':
+        if isinstance(spec, dict) and 'guardrailConfig' in spec:
+            raise errors.validation('input.converse.guardrailConfig is not part of CountTokens')
         chat = converse_to_chat(spec, value)
     elif kind == 'invokeModel':
         _check_keys(spec, ('body',), 'input.invokeModel')
@@ -683,4 +754,4 @@ def get_foundation_model(req):
 
 
 HANDLERS = {'Converse': converse, 'ConverseStream': converse_stream, 'InvokeModel': invoke, 'InvokeModelWithResponseStream': invoke_stream,
-            'CountTokens': count_tokens, 'GetFoundationModel': get_foundation_model}
+            'CountTokens': count_tokens, 'GetFoundationModel': get_foundation_model, 'ApplyGuardrail': gr.apply_guardrail}

@@ -161,13 +161,14 @@ class BedrockHTTP(LiveServer):
         body = json.dumps({'messages': []}).encode()
         sent = signed_headers(self.cred['access_key_id'], self.cred['secret_access_key'], 'POST', '/guardrail/g1/version/1/apply', self.host, body, service='bedrock-runtime')
         self.error(self.call('POST', '/guardrail/g1/version/1/apply', b'{"messages":[1]}', headers=sent), 403, 'InvalidSignatureException')
-        message = self.error(self.call('POST', '/guardrail/g1/version/1/apply', body, service='bedrock-runtime'), 501, 'UnsupportedOperationException')
-        self.assertIn('ApplyGuardrail', message)
+        # authenticated: the handler runs and rejects the body (no `source`)
+        message = self.error(self.call('POST', '/guardrail/g1/version/1/apply', body, service='bedrock-runtime'), 400, 'ValidationException')
+        self.assertIn('unsupported field messages', message)
         digest = hashlib.sha256(body).hexdigest()
         extra = {'x-amz-content-sha256': digest}
         sent = signed_headers(self.cred['access_key_id'], self.cred['secret_access_key'], 'POST', '/guardrail/g1/version/1/apply', self.host, body, service='bedrock-runtime', extra=extra)
         self.error(self.call('POST', '/guardrail/g1/version/1/apply', b'{"messages":[2]}', headers=sent), 403, 'InvalidSignatureException')
-        self.error(self.call('POST', '/guardrail/g1/version/1/apply', body, headers=sent), 501, 'UnsupportedOperationException')
+        self.error(self.call('POST', '/guardrail/g1/version/1/apply', body, headers=sent), 400, 'ValidationException')
 
     def test_unknown_and_recognised_operations(self):
         self.assertIn('POST /guardrail/x/nope', self.error(self.call('POST', '/guardrail/x/nope'), 404, 'UnknownOperationException'))
