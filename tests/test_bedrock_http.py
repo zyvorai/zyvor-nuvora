@@ -194,7 +194,7 @@ class BedrockHTTP(LiveServer):
             self.assertEqual(code, 200, raw)
         self.error(self.call('GET', '/foundation-models', headers={'Authorization': 'Bearer nope', 'Host': self.host}), 403, 'UnrecognizedClientException')
         # shared roots (/agents) are Bedrock only when credentials are sent
-        self.error(self.call('POST', '/agents', b'{}', headers={'Authorization': 'Bearer ' + self.token, 'Host': self.host}), 501, 'UnsupportedOperationException')
+        self.error(self.call('DELETE', '/agents/a1/agentversions/1', b'', headers={'Authorization': 'Bearer ' + self.token, 'Host': self.host}), 501, 'UnsupportedOperationException')
         self.assertEqual(self.json('/api/session', expect=200)['principal']['username'], 'owner')
 
     def test_console_routes_are_untouched(self):

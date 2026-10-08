@@ -10,7 +10,7 @@ import traceback
 from urllib.parse import parse_qsl, urlsplit
 
 from ..security import Fault
-from . import errors, eventstream, sigv4
+from . import control_agent, errors, eventstream, sigv4
 from .control import install as install_control
 from .credentials import Credentials
 from .errors import BedrockError, new_request_id
@@ -27,7 +27,7 @@ EXCLUSIVE_ROOTS = ('/model', '/guardrail', '/foundation-models', '/inference-pro
                    '/model-customization-jobs', '/evaluation-jobs', '/evaluation-job', '/logging/modelinvocations', '/listTagsForResource',
                    '/tagResource', '/untagResource')
 # Roots the web console could also serve: Bedrock only when the request carries credentials.
-SHARED_ROOTS = ('/agents', '/knowledgebases', '/guardrails', '/flows')
+SHARED_ROOTS = ('/agents', '/knowledgebases', '/guardrails', '/flows', '/tags')
 NATIVE = ('/api/', '/v1/', '/mcp', '/healthz')
 
 ROUTER = default_router()
@@ -37,6 +37,7 @@ for _route in ROUTER.routes:
     elif _route.operation in HANDLERS:
         _route.handler = HANDLERS[_route.operation]
 install_control(ROUTER)
+control_agent.install(ROUTER)
 
 agent_runtime.register(ROUTER)
 
