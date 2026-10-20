@@ -68,13 +68,12 @@ class Store:
         id = id or secrets.token_hex(10)
         clean = {k:v for k,v in data.items() if k not in ('id','revision','created','updated','tenant')}
         now = time.time()
-        with self.lock:
-            old = self.db.execute('SELECT revision FROM objects WHERE tenant=? AND kind=? AND id=?', (tenant,kind,id)).fetchone()
-            if expected is not None and (old is None or old['revision'] != expected):
-                raise ValueError('Revision conflict')
-            if old:
-                self.db.execute('UPDATE objects SET data=?,revision=revision+1,updated=? WHERE tenant=? AND kind=? AND id=?', (canonical(clean),now,tenant,kind,id))
-            else:
+        with self.transaction():
+            if expected is not None:
+                # Compare and bump in one statement so concurrent writers on other replicas cannot both pass.
+                if not self.db.execute('UPDATE objects SET data=?,revision=revision+1,updated=? WHERE tenant=? AND kind=? AND id=? AND revision=?', (canonical(clean),now,tenant,kind,id,expected)).rowcount:
+                    raise ValueError('Revision conflict')
+            elif not self.db.execute('UPDATE objects SET data=?,revision=revision+1,updated=? WHERE tenant=? AND kind=? AND id=?', (canonical(clean),now,tenant,kind,id)).rowcount:
                 self.db.execute('INSERT INTO objects (tenant,kind,id,data,revision,created,updated) VALUES (?,?,?,?,?,?,?)', (tenant,kind,id,canonical(clean),1,now,now))
         return self.get(tenant,kind,id)
 
