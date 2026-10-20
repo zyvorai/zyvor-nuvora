@@ -76,4 +76,8 @@ def execute(action,args,hosts,policy):
     safe=guard(json.dumps(value),policy)
     if not safe['allowed']:
         raise Fault('Action output violates the active guardrail',422)
-    return json.loads(safe['text'])
+    try:
+        return json.loads(safe['text'])
+    except ValueError:
+        # Masking a bare number or a user regex can leave text that is no longer JSON; return it as text.
+        return safe['text']

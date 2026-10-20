@@ -103,3 +103,36 @@ class ReplicaTest(unittest.TestCase):
         app.recover(self.a.heartbeat(app.instance, 45))
         self.assertEqual(self.a.get('t', 'jobs', mine['id'])['status'], 'running')
         self.assertEqual(self.a.get('t', 'jobs', gone['id'])['status'], 'interrupted')
+
+
+class RevisionRaceTest(unittest.TestCase):
+    def test_only_one_concurrent_writer_passes_expected_revision(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(Path(tmp)/'race.db')
+            first = Store(path)
+            item = first.put('t', 'k', {'v': 0}, 'x')
+            stores = [first] + [Store(path) for _ in range(5)]
+            for store in stores:
+                original = store.db.execute
+                def slow(sql, params=(), original=original):
+                    result = original(sql, params)
+                    if 'SELECT revision' in sql:
+                        import time; time.sleep(.1)
+                    return result
+                store.db.execute = slow
+            barrier = threading.Barrier(len(stores))
+            results = []
+            def edit(store, n):
+                barrier.wait()
+                try:
+                    store.put('t', 'k', {'v': n}, 'x', expected=item['revision'])
+                    results.append('ok')
+                except ValueError:
+                    results.append('conflict')
+            threads = [threading.Thread(target=edit, args=(s, n)) for n, s in enumerate(stores)]
+            [t.start() for t in threads]
+            [t.join() for t in threads]
+            self.assertEqual(sorted(results), ['conflict']*5 + ['ok'])
+            self.assertEqual(first.get('t', 'k', 'x')['revision'], 2)
+            for store in stores:
+                store.close()

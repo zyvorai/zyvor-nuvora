@@ -19,5 +19,5 @@ spec:
         backend:
           service:
             name: {{ .Release.Name }}
-            port: {name: http}
+            port: {name: {{ if .Values.tls.existingSecret }}https{{ else }}http{{ end }}}
 {{- end }}

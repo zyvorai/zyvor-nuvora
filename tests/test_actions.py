@@ -46,6 +46,16 @@ class ActionTests(unittest.TestCase):
             self.app.process_job(self.dev,job['id'])
             self.assertEqual(execute.call_count,1)
             self.assertTrue(self.app.get(self.dev,'jobs',job['id'])['result']['write']['accepted'])
+    def test_masked_output_that_is_not_json_is_returned_as_text(self):
+        import io
+        class Reply(io.BytesIO):
+            def __enter__(self):return self
+            def __exit__(self,*a):return False
+        action={'url':'http://127.0.0.1:9000/tool','method':'GET','input_schema':{'type':'object','properties':{}}}
+        opener=type('O',(),{'open':lambda self,req,timeout=0:Reply(b'4111111111111111')})()
+        with patch('nuvora.actions.build_opener' if False else 'urllib.request.build_opener',return_value=opener):
+            out=actions.execute(action,{},{'127.0.0.1'},{'redact_pii':True})
+        self.assertEqual(out,'[ACCOUNT]')
     def test_approved_action_pins_specification(self):
         a=self.make_action('POST')
         workflow=self.app.create(self.dev,'workflows',{'name':'Write','steps':[{'id':'write','type':'action','action_id':a['id'],'arguments':{'amount':50}}]})
