@@ -1,9 +1,58 @@
 // SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
+import { useEffect, useState } from 'react';
 import { Gauge, Play } from 'lucide-react';
 import { api, type Row } from '../api';
 import { AreaChart, Sparkline } from '../components/charts';
+import { Badge, Card } from '../components/kit';
 import ResourceTable from '../components/ResourceTable';
 import type { Act } from '../lib/types';
+
+function ReleaseBoard() {
+  const [board, setBoard] = useState<Row | null>(null);
+  useEffect(() => {
+    api('/api/evaluations/board')
+      .then(setBoard)
+      .catch(() => setBoard({ suites: [] }));
+  }, []);
+  if (!board?.suites?.length) return null;
+  return (
+    <Card title="Release board" eyebrow="Latest completed runs">
+      <table>
+        <thead>
+          <tr>
+            <th>Suite</th>
+            <th>Score</th>
+            <th>Verdict</th>
+            <th>Runs</th>
+          </tr>
+        </thead>
+        <tbody>
+          {board.suites.map((s: Row) => (
+            <tr key={s.id}>
+              <td>
+                <a className="link" href={'#evaluations/' + s.id}>
+                  {s.name}
+                </a>
+              </td>
+              <td>{s.latest_score == null ? '—' : Math.round(s.latest_score * 100) + '%'}</td>
+              <td>
+                {s.release_allowed == null ? (
+                  <span className="muted">no runs</span>
+                ) : (
+                  <Badge value={s.release_allowed ? 'allowed' : 'blocked'} />
+                )}
+              </td>
+              <td>
+                {s.runs}
+                {s.trend?.length > 1 && <Sparkline values={s.trend} label={s.name + ' trend'} width={72} height={24} />}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Card>
+  );
+}
 
 // Completed evaluation runs for one suite, oldest first.
 export function scoreHistory(jobs: Row[], evaluationId: string): Row[] {
@@ -38,31 +87,34 @@ export function ScoreTrend({ runs }: { runs: Row[] }) {
 
 export default function Evaluations({ rows, jobs = [], canWrite, act, onQueued }: { rows: Row[]; jobs?: Row[]; canWrite: boolean; act: Act; onQueued: () => void }) {
   return (
-    <ResourceTable
-      rows={rows}
-      columns={['name', 'model', 'cases', 'pass_threshold']}
-      emptyIcon={Gauge}
-      emptyTitle="Measure before you promote"
-      emptyText="An evaluation suite checks answers with phrase assertions, an LLM judge and groundedness against your knowledge, then gives a release verdict."
-      renderAction={(r) => {
-        const runs = scoreHistory(jobs, r.id);
-        const last = runs[runs.length - 1]?.result;
-        return (
-          <span className="eval-action">
-            {runs.length > 1 && <Sparkline values={runs.map((j) => j.result.score)} label={`${r.name} score trend`} width={72} height={24} />}
-            {last && <b className={last.release_allowed ? 'green' : 'red'}>{Math.round(last.score * 100)}%</b>}
-            <button
-              type="button"
-              className="btn-secondary"
-              disabled={!canWrite}
-              onClick={() => act(() => api('/api/evaluations/' + r.id + '/run', {})).then((j) => j && onQueued())}
-            >
-              <Play size={14} />
-              Evaluate
-            </button>
-          </span>
-        );
-      }}
-    />
+    <div className="stack-page">
+      <ReleaseBoard />
+      <ResourceTable
+        rows={rows}
+        columns={['name', 'model', 'cases', 'pass_threshold']}
+        emptyIcon={Gauge}
+        emptyTitle="Measure before you promote"
+        emptyText="An evaluation suite checks answers with phrase assertions, an LLM judge and groundedness against your knowledge, then gives a release verdict."
+        renderAction={(r) => {
+          const runs = scoreHistory(jobs, r.id);
+          const last = runs[runs.length - 1]?.result;
+          return (
+            <span className="eval-action">
+              {runs.length > 1 && <Sparkline values={runs.map((j) => j.result.score)} label={`${r.name} score trend`} width={72} height={24} />}
+              {last && <b className={last.release_allowed ? 'green' : 'red'}>{Math.round(last.score * 100)}%</b>}
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={!canWrite}
+                onClick={() => act(() => api('/api/evaluations/' + r.id + '/run', {})).then((j) => j && onQueued())}
+              >
+                <Play size={14} />
+                Evaluate
+              </button>
+            </span>
+          );
+        }}
+      />
+    </div>
   );
 }

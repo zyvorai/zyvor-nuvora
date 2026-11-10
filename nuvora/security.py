@@ -126,7 +126,7 @@ class Auth:
         return {'token':token,'id':row['id'],'role':role,'label':label.strip(),'expires':time.time()+lifetime}
 
     def list_tokens(self, principal):
-        query='SELECT id,username,role,label,created,expires FROM tokens WHERE tenant=? AND kind=\'service\' AND expires>?'
+        query='SELECT id,username,role,label,created,expires,last_used FROM tokens WHERE tenant=? AND kind=\'service\' AND expires>?'
         args=[principal['tenant'],time.time()]
         if principal['role']!='admin':
             query+=' AND username=?'
@@ -223,11 +223,17 @@ class Auth:
             claims=self.oidc.verify(token)
             tenant,username,role,_=self.oidc.identity(claims)
             return {'tenant':tenant,'username':username,'role':role,'source':'oidc','groups':clean_groups(self.oidc.groups(claims))}
+        digest=hashlib.sha256(token.encode()).hexdigest()
         with self.store.lock:
-            row=self.store.db.execute('SELECT * FROM tokens WHERE digest=? AND expires>?',(hashlib.sha256(token.encode()).hexdigest(),time.time())).fetchone()
+            row=self.store.db.execute('SELECT * FROM tokens WHERE digest=? AND expires>?',(digest,time.time())).fetchone()
+            if row and row['kind']=='service':
+                try:
+                    self.store.db.execute('UPDATE tokens SET last_used=? WHERE digest=?',(time.time(),digest))
+                except Exception:
+                    pass
         if not row:
             raise Fault('Sign in required',401)
-        return {**{k:row[k] for k in ('tenant','username','role')},'groups':self.groups(row['tenant'],row['username'])}
+        return {**{k:row[k] for k in ('tenant','username','role')},'groups':self.groups(row['tenant'],row['username']),**({'token_id':row['id']} if row['kind']=='service' else {})}
 
     def logout(self, token):
         with self.store.lock:

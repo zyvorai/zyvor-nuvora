@@ -25,6 +25,8 @@ import Overview from './pages/Overview';
 import Playground from './pages/Playground';
 import Knowledge from './pages/Knowledge';
 import Agents from './pages/Agents';
+import Schedules from './pages/Schedules';
+import Webhooks from './pages/Webhooks';
 import Workflows from './pages/Workflows';
 import Runs from './pages/Runs';
 import Evaluations, { ScoreTrend, scoreHistory } from './pages/Evaluations';
@@ -43,6 +45,7 @@ const pageHero: Partial<Record<Page, { title: string; lede: string; tint?: HeroT
   routers: { title: 'Pay for the big model only when you need it.', lede: 'A cascade tries the cheapest model first and escalates when the answer is empty, hedged or scored low by a judge model. Every attempt is metered.', tint: 'amber' },
   knowledge: { title: 'Answers start with evidence.', lede: 'Index documents with content digests, then inspect exactly what BM25 and vector fusion retrieve before a model sees it.', tint: 'green' },
   agents: { title: 'Give intelligence a purpose.', lede: 'Bounded model and tool loops with registered schemas. Memory writes and external actions pause for a different human.', tint: 'purple' },
+  schedules: { title: 'Run on the clock.', lede: 'Interval or cron schedules enqueue agent jobs automatically. Run now, or let the worker tick about once a minute.', tint: 'amber' },
   actions: { title: 'Connect the systems you trust.', lede: 'Typed enterprise APIs registered by an administrator. Writes wait for an exact-argument approval and never retry on their own.', tint: 'purple' },
   connectors: { title: 'Knowledge that keeps itself current.', lede: 'Sync a website, an S3 prefix or a Confluence space into a knowledge base. Unchanged pages are skipped, changed ones re-indexed and removed ones dropped, with group access applied to every document.', tint: 'green' },
   mcp_servers: { title: 'Bring your tools. Keep the brakes.', lede: 'Connect Model Context Protocol servers over HTTP. Read-only servers run directly; every call to a writing server waits for a different person to approve it.', tint: 'purple' },
@@ -53,17 +56,18 @@ const pageHero: Partial<Record<Page, { title: string; lede: string; tint?: HeroT
   evaluations: { title: 'Measure before you promote.', lede: 'Phrase assertions, LLM-judge criteria and groundedness checks with pass thresholds and release verdicts, comparable across revisions.', tint: 'green' },
   batches: { title: 'Run many prompts as one.', lede: 'Queue up to 100 prompts as one durable run. Each item records its own success or failure.' },
   approvals: { title: 'The decision stays with you.', lede: 'Exact actions, their proposer, expiry and fingerprint. An author can never approve their own proposal.', tint: 'red' },
+  webhooks: { title: 'Tell the systems that care.', lede: 'HMAC-signed POSTs with optional Slack, Teams or email shapes, retries and a test ping. Secrets stay redacted after create.', tint: 'amber' },
   policies: { title: 'A consistent boundary for every model.', lede: 'Words, topics, regex filters, PII entities, grounding and an optional classifier model, applied to inputs and outputs, with a daily token budget.', tint: 'red' },
   usage: { title: 'Know what intelligence costs.', lede: 'Tokens, latency and estimated spend per request, priced at operator-configured rates.', tint: 'amber' },
   audit: { title: 'Trace the action back to its evidence.', lede: 'A hash-chained audit trail for every session, change, run and decision in this workspace.', tint: 'red' },
   keys: { title: 'Keys that can only do enough.', lede: 'Scoped, expiring service tokens for scripts, CI and the OpenAI-compatible API. They can view or propose, never approve.', tint: 'amber' },
-  settings: { title: 'Your workspace, as deployed.', lede: 'Account, appearance and the server configuration this workspace runs under.' },
+  settings: { title: 'Your workspace, as deployed.', lede: 'Account, appearance, config bundles and the server configuration this workspace runs under.' },
   users: { title: 'The right access. The right workspace.', lede: 'Viewers read, developers propose, approvers decide, administrators manage. Every workspace is isolated.' },
 };
 
-const COLLECTIONS = ['models', 'routers', 'knowledge', 'connectors', 'datasets', 'agents', 'actions', 'mcp_servers', 'workflows', 'prompts', 'policies', 'evaluations', 'recipes', 'jobs', 'approvals'];
-const CREATABLE: Page[] = ['models', 'routers', 'agents', 'actions', 'mcp_servers', 'knowledge', 'connectors', 'workflows', 'prompts', 'policies', 'evaluations', 'recipes'];
-const ADMIN_ONLY: Page[] = ['models', 'policies', 'actions', 'mcp_servers', 'connectors'];
+const COLLECTIONS = ['models', 'routers', 'knowledge', 'connectors', 'datasets', 'agents', 'schedules', 'actions', 'mcp_servers', 'workflows', 'prompts', 'policies', 'evaluations', 'recipes', 'jobs', 'approvals', 'webhooks'];
+const CREATABLE: Page[] = ['models', 'routers', 'agents', 'schedules', 'actions', 'mcp_servers', 'knowledge', 'connectors', 'workflows', 'prompts', 'policies', 'evaluations', 'recipes', 'webhooks'];
+const ADMIN_ONLY: Page[] = ['models', 'policies', 'actions', 'mcp_servers', 'connectors', 'webhooks'];
 
 export default function App() {
   return (
@@ -278,6 +282,7 @@ function Console() {
     routers: <Routers rows={rows} models={collections.models || []} />,
     knowledge: <Knowledge rows={rows} models={collections.models || []} canWrite={canWrite} act={act} refresh={refresh} />,
     agents: <Agents rows={rows} canWrite={canWrite} act={act} />,
+    schedules: <Schedules rows={rows} canWrite={canWrite} act={act} />,
     actions: <Actions rows={rows} act={act} isAdmin={principal.role === 'admin'} />,
     mcp_servers: <McpServers rows={rows} />,
     connectors: <Connectors rows={rows} knowledge={collections.knowledge || []} act={act} isAdmin={principal.role === 'admin'} onQueued={() => navigate('jobs')} />,
@@ -298,6 +303,7 @@ function Console() {
     evaluations: <Evaluations rows={rows} jobs={collections.jobs || []} canWrite={canWrite} act={act} onQueued={() => navigate('jobs')} />,
     batches: <Batches models={collections.models || []} canWrite={canWrite} act={act} done={() => navigate('jobs')} />,
     approvals: <Approvals rows={rows} principal={principal} canApprove={canApprove} act={act} />,
+    webhooks: <Webhooks rows={rows} isAdmin={principal.role === 'admin'} act={act} />,
     policies: <Guardrails rows={rows} act={act} />,
     usage: <Usage refresh={refresh} />,
     audit: <Audit refresh={refresh} />,

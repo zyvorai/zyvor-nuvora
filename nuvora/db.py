@@ -8,7 +8,7 @@ import sqlite3
 import threading
 import zlib
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 TABLES = '''
 CREATE TABLE IF NOT EXISTS objects (
@@ -57,6 +57,7 @@ COLUMNS = [
     ('usage', 'cached_tokens', 'INTEGER NOT NULL DEFAULT 0'),
     ('usage', 'saved', 'REAL NOT NULL DEFAULT 0'),
     ('users', 'groups', "TEXT NOT NULL DEFAULT ''"),
+    ('tokens', 'last_used', 'REAL NOT NULL DEFAULT 0'),
 ]
 
 

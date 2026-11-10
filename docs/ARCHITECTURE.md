@@ -23,11 +23,11 @@ The database includes application content, user password hashes, token digests, 
 
 Text is sliced with bounded overlap. Offline retrieval fuses BM25 and hashed lexical-vector ranks. Hash vectors support reproducibility and require no downloads; they do not understand meaning. A knowledge base may instead reference an external embedding model, whose vectors are saved with each chunk. Query embeddings use that same model and reject incompatible dimensions. Changing the embedding model requires reingestion.
 
-A result includes document identity, source, content digest, chunk position and scores. An AI answer must still be evaluated for citation correctness. The demo provider merely echoes the supplied prompt and does not validate evidence.
+A result includes document identity, source, content digest, chunk position and scores. Optional `prefer_fresh` lightly boosts newer documents (`last_seen` / `updated`). `/api/answer` also reports a lexical `citation_overlap` score; neither is proof of entailment. The demo provider merely echoes the supplied prompt and does not validate evidence.
 
 ## Jobs and execution
 
-Submission pins the resource specification and creator principal. Idempotency keys bind a submission to its exact payload. Each replica runs one worker. A worker atomically claims a queued job (`FOR UPDATE SKIP LOCKED` on PostgreSQL), and each completed workflow/agent step records a checkpoint. Workers heartbeat into the `workers` table. A Zyntra handoff parks a workflow as `waiting_external` until a poller sees Zyntra's decision.
+Submission pins the resource specification and creator principal. Idempotency keys bind a submission to its exact payload. Each replica runs one worker. A worker atomically claims a queued job (`FOR UPDATE SKIP LOCKED` on PostgreSQL), and each completed workflow/agent step records a checkpoint. Workers heartbeat into the `workers` table. About once a minute the worker also ticks due `schedules` (interval agent runs) and connector syncs. A Zyntra handoff parks a workflow as `waiting_external` until a poller sees Zyntra's decision. Completed or failed jobs, and approval create/decide events, may fire matching outbound `webhooks` (HMAC-signed, fire-and-forget).
 
 An approval step captures an exact action and SHA-256 fingerprint. Only a different authenticated human with approver/admin authority may decide. The decision validates the fingerprint and job checkpoint atomically. The worker resumes that job and uses its pinned resource revision.
 

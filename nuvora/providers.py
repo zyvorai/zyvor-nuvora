@@ -265,6 +265,7 @@ class Providers:
 
     def chat(self,model,messages,tools=None,max_tokens=1024,temperature=.2,opts=None):
         """opts: top_p, stop (list), tool_choice, response_format; anything the provider cannot honour is a 422."""
+        from .retries import with_retries
         self.validate(model)
         opts=opts or {}
         check_support(model,tools,opts)
@@ -279,7 +280,7 @@ class Providers:
                 pick=next((t for t in tools if isinstance(choice,dict) and t['function']['name']==choice['function']['name']),tools[0])
                 name=pick['function']['name']
                 params=pick['function'].get('parameters') or {}
-                args={'query':text} if name=='knowledge_search' else {k:text if k=='query' else demo_value((params.get('properties') or {}).get(k),k) for k in params.get('required') or []}
+                args={'query':text} if name in ('knowledge_search','web_search') else {k:text if k=='query' else demo_value((params.get('properties') or {}).get(k),k) for k in params.get('required') or []}
                 return {'content':'','tool_calls':[{'id':'demo-call','type':'function','function':{'name':name,'arguments':json.dumps(args)}}],'usage':{'prompt_tokens':len(text)//4+1,'completion_tokens':10},'evidence_class':'synthetic'}
             fmt=opts.get('response_format')
             if fmt and fmt['type']=='json_object':
@@ -291,6 +292,13 @@ class Providers:
             if opts.get('stop'):
                 content=stop_at(content,opts['stop'])
             return {'content':content,'tool_calls':[],'usage':{'prompt_tokens':sum(len(str(m)) for m in messages)//4+1,'completion_tokens':len(text)//4+12},'evidence_class':'synthetic'}
+        attempts=model.get('max_retries',0) or 0
+        if not isinstance(attempts,int) or attempts<0:
+            attempts=0
+        return with_retries(lambda: self._chat_once(model,messages,tools,max_tokens,temperature,opts),max_retries=min(attempts,3))
+
+    def _chat_once(self,model,messages,tools,max_tokens,temperature,opts):
+        kind=model['provider']
         if kind=='aws':
             client=self._aws_client(model)
             try:
@@ -301,12 +309,7 @@ class Providers:
             text,calls=converse_to_openai(raw['output']['message'])
             return {'content':text,'tool_calls':calls,'usage':{'prompt_tokens':usage.get('inputTokens',0),'completion_tokens':usage.get('outputTokens',0)},'evidence_class':'provider'}
         url=model['base_url'].rstrip('/')
-        headers={}
-        if model.get('key_env'):
-            key=os.getenv(model['key_env'])
-            if not key:
-                raise Fault('Provider credential is not configured',503)
-            headers['Authorization']='Bearer '+key
+        headers=self._auth(model)
         if kind=='ollama':
             raw=post_json(url+'/api/chat',self._ollama_body(model,messages,tools,max_tokens,temperature,opts,False),headers,self.allowed_hosts)
             message=raw['message']

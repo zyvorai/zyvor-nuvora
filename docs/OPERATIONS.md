@@ -20,6 +20,8 @@
 | `NUVORA_ARTIFACT_TTL_DAYS` | How long generated images are kept, 1–365 days (default 7) |
 | `NUVORA_OTEL_ENDPOINT` | OTLP/HTTP traces endpoint, such as `http://collector:4318/v1/traces`. Spans carry timings, models and costs, never prompt or answer text |
 | `NUVORA_PROVIDER_TIMEOUT` | Seconds to wait for a model provider, 5–900 (default 45). Raise it for CPU-only models, where long grounded prompts can take minutes |
+| `NUVORA_WEBSEARCH_URL` | Optional allow-listed search endpoint for the agent `web_search` tool. Accepts `?q=` (and `limit`) and returns JSON `{results:[{title,url,snippet}]}`. Host must be reachable; unset returns empty results with a note |
+| `NUVORA_SMTP_HOST`, `NUVORA_SMTP_PORT`, `NUVORA_SMTP_USER`, `NUVORA_SMTP_PASSWORD`, `NUVORA_SMTP_FROM`, `NUVORA_SMTP_TLS` | SMTP for email-format webhooks. Port defaults to 587 with STARTTLS; set port 465 for SSL. Without a host, email webhooks fail delivery |
 
 Optional Python extras: `pdf` (pypdf), `sso` (cryptography, for bearer JWTs), `postgres` (psycopg), `aws` (boto3), `ocr` (pytesseract and Pillow; also needs the `tesseract` binary, which the container image includes), or `all`. The core runs on the standard library; a missing extra returns 503 with an install hint.
 

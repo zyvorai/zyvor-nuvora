@@ -10,12 +10,14 @@ Agents choose from the tools you select on the agent. Each tool call is checked 
 
 | Source | How to add | Approval |
 |---|---|---|
-| Built-in | `knowledge_search` (with an optional metadata filter), `memory_search` and others listed by `GET /api/tools` | Read-only |
+| Built-in | `knowledge_search` (optional metadata filter), `web_search` (via `NUVORA_WEBSEARCH_URL`), `memory_search` and others listed by `GET /api/tools` | Read-only |
 | API actions | Register one in **Build → API actions**, or import many with `POST /api/actions/import-openapi {spec, base_url?, operations?}` | POST actions always wait for a different person |
 | MCP servers | Add a server in **Build → MCP servers** with its `url`, optional `key_env` and a `readonly` flag; choose which of its tools to expose | Calls to a server that isn't `readonly` wait for a different person |
 | Integrations | Netra read tools and Keep `run_code` (see [integrations](./integrations)) | `run_code` always waits |
 
 The OpenAPI importer turns GET and POST operations with flat query or JSON-body inputs into typed actions. MCP tools appear as `mcp_<first 8 characters of the server id>_<tool>`. MCP server hosts must be on `NUVORA_PROVIDER_HOSTS`.
+
+For interval schedules, outbound webhooks and config bundles, see [Schedules, webhooks and bundles](./schedules-and-webhooks).
 
 ## Memory
 

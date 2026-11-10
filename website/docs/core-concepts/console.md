@@ -15,9 +15,9 @@ The console follows the Zyvor Apple UX contract shared with Netra:
 |---|---|
 | **Overview** | Overview |
 | **Workspace** | Playground, Models, Knowledge |
-| **Build** | Agents, Connectors & actions, Workflows, Prompts, Model studio |
+| **Build** | Agents, Schedules, Connectors & actions, Workflows, Prompts, Model studio |
 | **Operate** | Runs, Evaluations, Batch inference |
-| **Govern** | Approvals, Guardrails, Usage & cost, Evidence, Access, API keys, Settings |
+| **Govern** | Approvals, Webhooks, Guardrails, Usage & cost, Evidence, Access, API keys, Settings |
 
 Every page has a hash URL (`#playground`), so links and the browser back button work. Resources deep-link too: `#workflows/<id>` opens that workflow's drawer. The account menu shows `tenant · role` and holds password change, API keys, Settings and log out. A dot appears on **Approvals** when a decision is waiting, and the bell lists approvals and recent runs.
 

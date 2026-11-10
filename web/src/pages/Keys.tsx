@@ -71,6 +71,7 @@ export default function Keys({ principal, act, refresh }: { principal: Row; act:
                       <br />
                       <small className="muted">
                         <code>{t.id}</code> · created {ago(t.created)}
+                        {t.last_used ? ` · last used ${ago(t.last_used)}` : ' · never used'}
                       </small>
                     </td>
                     <td>

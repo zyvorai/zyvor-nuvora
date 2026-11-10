@@ -89,6 +89,16 @@ export default function PolicyFields({ data, set, chatModels }: { data: Row; set
           onChange={(e) => set('grounding_threshold', e.target.value === '' ? null : Number(e.target.value))}
         />
       </Field>
+      <Field label="Minimum citation overlap on /api/answer (0–1; blank turns it off)">
+        <input
+          type="number"
+          min={0}
+          max={1}
+          step={0.05}
+          value={data.min_citation_overlap ?? ''}
+          onChange={(e) => set('min_citation_overlap', e.target.value === '' ? null : Number(e.target.value))}
+        />
+      </Field>
 
       <fieldset className="policy-group">
         <legend>Classifier model</legend>

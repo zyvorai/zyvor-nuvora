@@ -58,5 +58,22 @@ Evidence terms: **local test** means exercised in this repository; **adapter** m
 | Console | Local test | 22 pages, command palette, streaming playground with image mode, document upload, guardrail policy editor, routers, connectors, model studio, evaluation case editor and per-case results, SSO sign-in, integrations settings, resource drawers with history and diff, workflow builder, run inspector with waterfall, charts; Playwright smoke at 1440px and 390px in light and dark |
 | Browser accessibility | Partial | Labelled controls, keyboard navigation and ARIA roles checked by tests; no formal audit with assistive technology |
 | Multi-region HA / managed service SLAs | Roadmap | Several replicas on one PostgreSQL work; no multi-region, failover testing or SLA |
+| Scheduled agents | Local test | Interval-based (1–10080 min) agent runs enqueued by the worker; no cron expression language |
+| Outbound webhooks | Local test | HMAC-SHA256 signed POSTs on job.completed/failed and approval.created/decided; fire-and-forget, no retry queue; secrets redacted on read |
+| Config bundles | Local test | Export/import of agents/prompts/policies/workflows/guardrails/routers; dry-run supported; no credentials or documents |
+| Provider retries | Local test | Per-model `max_retries` 0–3 with exponential backoff on transient 502/503/504 or timeout-like faults; streams are not retried |
+| Document freshness | Local test | `last_seen` / `source_version` on ingest; optional `prefer_fresh` boost on retrieve and answer |
+| Citation overlap | Local test | Lexical overlap score on `/api/answer` (`citation_overlap`); not entailment |
+| Web search tool | Adapter | `web_search` agent tool via `NUVORA_WEBSEARCH_URL`; empty results with a note when unset |
+| User activity | Local test | Last-seen + request count per principal; exposed on `/api/users` |
+| Cron schedules | Local test | 5-field UTC cron or interval; Run now; no seconds field or timezone map |
+| Webhook formats and retries | Local test | generic/slack/teams/email shapes, max_retries 0–5, last_status; SMTP needs NUVORA_SMTP_*; not a Slack/Teams app |
+| Model failover | Local test | Optional `failover_model` after transient chat failures; non-stream only |
+| Citation overlap gate | Local test | Optional policy `min_citation_overlap` on `/api/answer` |
+| Signed audit checkpoint | Local test | HMAC-SHA256 over tip+timestamp with NUVORA_SECRET_KEY; not external WORM storage |
+| Job cancel | Local test | Queued → cancelled only; running jobs stay for review |
+| Token last-used | Local test | Service tokens record last_used on principal() |
+| Token estimate API | Local test | `/api/estimate` characters/4 heuristic; not a model tokenizer |
+| Evaluation release board | Local test | `GET /api/evaluations/board` aggregates latest suite scores |
 
 No market-superiority or AWS compliance equivalence claim is supported by these tests.

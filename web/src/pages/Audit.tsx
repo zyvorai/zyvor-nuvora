@@ -28,6 +28,7 @@ export default function Audit({ refresh }: { refresh: number }) {
   const [filters, setFilters] = useState<Filters>(EMPTY);
   const [applied, setApplied] = useState<Filters>(EMPTY);
   const [all, setAll] = useState<Row[]>([]);
+  const [checkpoint, setCheckpoint] = useState<Row | null>(null);
 
   const query = useMemo(() => {
     const q = new URLSearchParams();
@@ -62,6 +63,21 @@ export default function Audit({ refresh }: { refresh: number }) {
       title="Audit evidence"
       actions={
         <div className="kit-section__actions">
+          <button
+            type="button"
+            className="btn-secondary compact"
+            onClick={() =>
+              api('/api/audit/checkpoint')
+                .then((r) => {
+                  setCheckpoint(r);
+                  if (r.checkpoint) download('nuvora-audit-checkpoint.json', r.checkpoint);
+                })
+                .catch((e) => setError(String(e)))
+            }
+          >
+            <ShieldCheck size={14} />
+            Sign tip
+          </button>
           <button type="button" className="btn-secondary compact" disabled={!events.length} onClick={() => download(`nuvora-audit${filtered ? '-filtered' : ''}.csv`, auditCSV(events), 'text/csv')}>
             <Download size={14} />
             CSV
@@ -83,6 +99,7 @@ export default function Audit({ refresh }: { refresh: number }) {
         <b>{data ? (data.verification?.valid ? 'Chain verified' : 'Chain broken') : 'Checking chain…'}</b>
         <span>
           {filtered ? `${events.length} of ${data?.verification?.events || 0} events` : `${data?.verification?.events || 0} events`}
+          {checkpoint?.checkpoint ? ` · tip signed ${time(checkpoint.checkpoint.at)}` : checkpoint ? ` · ${checkpoint.signing}` : ''}
         </span>
       </div>
       <form

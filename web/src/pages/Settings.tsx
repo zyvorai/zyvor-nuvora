@@ -1,10 +1,82 @@
 // SPDX-License-Identifier: LicenseRef-Zyvor-Production-1.0
 import { useEffect, useState } from 'react';
-import { Moon, Plug, ShieldCheck, Sun } from 'lucide-react';
+import { Download, Moon, Package, Plug, ShieldCheck, Sun, Upload } from 'lucide-react';
 import { api, type Row } from '../api';
 import { Gauge } from '../components/charts';
-import { Badge, Card, Skeleton } from '../components/kit';
+import { Badge, Card, Field, Skeleton } from '../components/kit';
 import type { Theme } from '../theme';
+
+function Bundles({ canImport }: { canImport: boolean }) {
+  const [status, setStatus] = useState('');
+  const [error, setError] = useState('');
+  const [payload, setPayload] = useState('');
+  async function exportBundle() {
+    setError('');
+    setStatus('');
+    try {
+      const data = await api('/api/bundles/export');
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'nuvora-bundle.json';
+      a.click();
+      URL.revokeObjectURL(url);
+      setStatus('Exported agents, prompts, policies, workflows, guardrails and routers.');
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+  async function importBundle(dryRun: boolean) {
+    setError('');
+    setStatus('');
+    try {
+      const body = JSON.parse(payload);
+      const result = await api('/api/bundles/import', { ...body, dry_run: dryRun });
+      setStatus(`${dryRun ? 'Dry run' : 'Imported'}: ${(result.created || []).length} resource(s).`);
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+  return (
+    <>
+      <p className="note">Move workspace configuration between environments. Secrets and credentials are never included.</p>
+      <div className="actions">
+        <button type="button" className="btn-secondary" onClick={exportBundle}>
+          <Download size={15} />
+          Export bundle
+        </button>
+      </div>
+      {canImport && (
+        <>
+          <Field label="Import JSON">
+            <textarea className="code-input" rows={6} value={payload} onChange={(e) => setPayload(e.target.value)} placeholder='{"version":1,"kinds":{…}}' />
+          </Field>
+          <div className="actions">
+            <button type="button" className="btn-secondary" disabled={!payload.trim()} onClick={() => importBundle(true)}>
+              <Package size={15} />
+              Dry run
+            </button>
+            <button type="button" className="primary" disabled={!payload.trim()} onClick={() => importBundle(false)}>
+              <Upload size={15} />
+              Import
+            </button>
+          </div>
+        </>
+      )}
+      {status && (
+        <p role="status" className="success">
+          {status}
+        </p>
+      )}
+      {error && (
+        <p role="alert" className="error">
+          {error}
+        </p>
+      )}
+    </>
+  );
+}
 
 function Integrations() {
   const [data, setData] = useState<Row | null>(null);
@@ -197,6 +269,10 @@ export default function Settings({ principal, theme, onTheme, onPassword }: { pr
           </div>
         )}
         {admin && <p className="note">Provider hosts, TLS and limits come from the server environment. Change them in the deployment, not here.</p>}
+      </Card>
+
+      <Card title="Config bundles" className={admin ? 'span3' : ''}>
+        <Bundles canImport={admin} />
       </Card>
 
       {admin && (

@@ -13,14 +13,16 @@ import { formatMeta, parseMeta, splitGroups } from '../lib/meta';
 
 const KEYS: Record<string, string[]> = {
   actions: ['url', 'method', 'key_env', 'description'],
-  models: ['provider', 'base_url', 'upstream_model', 'key_env', 'region', 'input_price', 'output_price', 'cached_input_price', 'image_price', 'capability', 'enabled', 'vision'],
+  models: ['provider', 'base_url', 'upstream_model', 'key_env', 'region', 'input_price', 'output_price', 'cached_input_price', 'image_price', 'capability', 'enabled', 'vision', 'max_retries', 'failover_model'],
   routers: ['models', 'judge_model', 'min_score'],
   knowledge: ['embedding_model', 'rerank_model', 'ocr_model', 'transcription_model'],
   agents: ['model', 'system_prompt', 'knowledge_ids', 'tools', 'max_steps', 'summarize_memory'],
+  schedules: ['agent', 'every_minutes', 'cron', 'prompt', 'enabled'],
+  webhooks: ['url', 'to', 'events', 'secret', 'enabled', 'format', 'max_retries'],
   mcp_servers: ['url', 'key_env', 'readonly', 'tools'],
   connectors: ['type', 'knowledge_id', 'url', 'depth', 'max_pages', 'bucket', 'prefix', 'region', 'space', 'username', 'key_env', 'metadata', 'groups', 'interval_minutes'],
   prompts: ['template', 'variants'],
-  policies: ['redact_pii', 'detect_injection', 'max_chars', 'daily_tokens', 'blocked_topics', 'word_filters', 'regex_filters', 'pii_entities', 'grounding_threshold', 'classifier_model', 'classifier_categories', 'classifier_threshold', 'cache_ttl'],
+  policies: ['redact_pii', 'detect_injection', 'max_chars', 'daily_tokens', 'blocked_topics', 'word_filters', 'regex_filters', 'pii_entities', 'grounding_threshold', 'classifier_model', 'classifier_categories', 'classifier_threshold', 'cache_ttl', 'min_citation_overlap'],
   recipes: ['model', 'method', 'dataset', 'dataset_id', 'teacher_model', 'rank', 'epochs'],
   evaluations: ['model', 'pass_threshold', 'judge_model', 'knowledge_ids'],
   workflows: [],
@@ -43,6 +45,8 @@ export function createLabel(kind: string): string {
   if (kind === 'policies') return 'policy';
   if (kind === 'actions') return 'action';
   if (kind === 'mcp_servers') return 'MCP server';
+  if (kind === 'schedules') return 'schedule';
+  if (kind === 'webhooks') return 'webhook';
   return kind.slice(0, -1);
 }
 
@@ -67,12 +71,22 @@ export default function CreateForm({
     capability: 'chat',
     input_price: 0,
     output_price: 0,
+    max_retries: kind === 'webhooks' ? 2 : 0,
     model: firstModel,
     tools: ['knowledge_search'],
-    url: kind === 'connectors' ? '' : 'https://api.internal.example/status',
+    url: kind === 'webhooks' ? 'https://hooks.example/nuvora' : kind === 'connectors' ? '' : 'https://api.internal.example/status',
     type: 'web',
     knowledge_ids: [],
     max_steps: 5,
+    every_minutes: 60,
+    cron: '',
+    prompt: 'Run the scheduled check.',
+    events: ['job.completed', 'job.failed'],
+    format: 'generic',
+    secret: '',
+    to: '',
+    failover_model: '',
+    min_citation_overlap: '',
     template: 'Answer {{question}} using {{evidence}}.',
     redact_pii: true,
     detect_injection: true,
@@ -167,6 +181,30 @@ export default function CreateForm({
         body.groups = splitGroups(groupText);
         body.interval_minutes = data.interval_minutes ? Number(data.interval_minutes) : null;
       }
+      if (kind === 'schedules') {
+        body.agent = data.agent;
+        body.prompt = data.prompt || 'Run the scheduled check.';
+        body.enabled = data.enabled !== false;
+        if (String(data.cron || '').trim()) body.cron = String(data.cron).trim();
+        else body.every_minutes = Number(data.every_minutes);
+      }
+      if (kind === 'webhooks') {
+        body.format = data.format || 'generic';
+        body.max_retries = Number(data.max_retries ?? 2);
+        if (body.format === 'email') body.to = data.to || data.url;
+        else body.url = data.url;
+        body.events = Array.isArray(data.events)
+          ? data.events
+          : String(data.events || '')
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean);
+        body.secret = data.secret;
+        body.enabled = data.enabled !== false;
+      }
+      if (kind === 'models' && data.max_retries !== undefined && data.max_retries !== '') body.max_retries = Number(data.max_retries);
+      if (kind === 'models' && data.failover_model) body.failover_model = data.failover_model;
+      if (kind === 'policies' && data.min_citation_overlap !== '' && data.min_citation_overlap != null) body.min_citation_overlap = Number(data.min_citation_overlap);
       if (existing) body.expected_revision = existing.revision;
       if (kind === 'actions') body.input_schema = JSON.parse(json);
       if (kind === 'workflows') {
@@ -295,6 +333,21 @@ export default function CreateForm({
             </Field>
           </div>
           {data.capability === 'image' && field('image_price', 'USD per generated image', 'number')}
+          <Field label="Provider retries on transient errors (0–3)">
+            <input type="number" min={0} max={3} value={data.max_retries ?? 0} onChange={(e) => set('max_retries', Number(e.target.value))} />
+          </Field>
+          <Field label="Failover model (optional)">
+            <select value={data.failover_model || ''} onChange={(e) => set('failover_model', e.target.value)}>
+              <option value="">None</option>
+              {chatModels
+                .filter((m) => m.id !== existing?.id)
+                .map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+            </select>
+          </Field>
           <label className="check">
             <input type="checkbox" checked={!!data.enabled} onChange={(e) => set('enabled', e.target.checked)} />
             Enabled for routing
@@ -305,6 +358,61 @@ export default function CreateForm({
               Accepts images (vision)
             </label>
           )}
+        </>
+      )}
+      {kind === 'schedules' && (
+        <>
+          <Field label="Agent">
+            <select value={data.agent || ''} onChange={(e) => set('agent', e.target.value)} required>
+              <option value="">Select an agent</option>
+              {(collections.agents || []).map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          {field('every_minutes', 'Every N minutes (ignored when cron is set)', 'number')}
+          <Field label="Cron (optional · 5 fields, UTC)">
+            <input value={data.cron || ''} onChange={(e) => set('cron', e.target.value)} placeholder="0 9 * * 1-5" />
+          </Field>
+          <Field label="Prompt for each run">
+            <textarea rows={3} value={data.prompt || ''} onChange={(e) => set('prompt', e.target.value)} />
+          </Field>
+          <label className="check">
+            <input type="checkbox" checked={data.enabled !== false} onChange={(e) => set('enabled', e.target.checked)} />
+            Enabled
+          </label>
+        </>
+      )}
+      {kind === 'webhooks' && (
+        <>
+          <Field label="Payload format">
+            <select value={data.format || 'generic'} onChange={(e) => set('format', e.target.value)}>
+              <option value="generic">Generic JSON</option>
+              <option value="slack">Slack</option>
+              <option value="teams">Teams</option>
+              <option value="email">Email (SMTP)</option>
+            </select>
+          </Field>
+          {data.format === 'email' ? field('to', 'Recipient email') : field('url', 'Destination URL · https recommended')}
+          <Field label="Events (comma-separated)">
+            <input
+              value={Array.isArray(data.events) ? data.events.join(', ') : data.events || ''}
+              onChange={(e) => set('events', e.target.value)}
+              placeholder="job.completed, approval.decided, document.ingested"
+              required
+            />
+          </Field>
+          {field('secret', existing ? 'HMAC secret (leave masked to keep)' : 'HMAC secret (≥16 characters)')}
+          <Field label="Delivery retries (0–5)">
+            <input type="number" min={0} max={5} value={data.max_retries ?? 2} onChange={(e) => set('max_retries', Number(e.target.value))} />
+          </Field>
+          <label className="check">
+            <input type="checkbox" checked={data.enabled !== false} onChange={(e) => set('enabled', e.target.checked)} />
+            Enabled
+          </label>
+          <p className="note">POSTs carry X-Nuvora-Signature. Email format needs NUVORA_SMTP_HOST on the server.</p>
         </>
       )}
       {kind === 'mcp_servers' && (

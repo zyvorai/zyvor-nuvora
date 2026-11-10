@@ -40,6 +40,7 @@ export default function Users({ principal, act, refresh }: { principal: Row; act
                   {self && <span className="muted small"> · you</span>}
                 </b>
                 {lastAdmin && <small>Last administrator</small>}
+                {u.last_seen && <small>Last seen {new Date(u.last_seen * 1000).toLocaleString()}</small>}
                 {u.source === 'sso' && <small>SSO · role and groups re-sync from the identity provider at each sign-in</small>}
                 {u.source === 'sso' ? (
                   u.groups?.length > 0 && <small>Groups: {u.groups.join(', ')}</small>

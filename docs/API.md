@@ -28,9 +28,23 @@ Service tokens may not carry approver/admin authority. A developer may mint view
 
 `GET /api/{collection}` returns `{items: [...]}`. `GET /api/{collection}/{id}` returns an object. All authenticated users may read their tenant collections.
 
-Writable collections: `actions`, `models`, `knowledge`, `agents`, `prompts`, `policies`, `workflows`, `evaluations`, `recipes`, `routers`, `mcp_servers`, `connectors`. Actions, models, policies, MCP servers and connectors require admin; others require developer/admin. POST to the collection creates an object; POST to its ID updates using `expected_revision`. GET `/api/{collection}/{id}/versions` lists retained snapshots. DELETE requires admin and is only exposed for writable resources. Model deletion is refused for some direct resource references; there is no complete dependency garbage collector.
+Writable collections: `actions`, `models`, `knowledge`, `agents`, `prompts`, `policies`, `workflows`, `evaluations`, `recipes`, `routers`, `mcp_servers`, `connectors`, `schedules`, `webhooks`. Actions, models, policies, MCP servers, connectors and webhooks require admin; others require developer/admin. POST to the collection creates an object; POST to its ID updates using `expected_revision`. GET `/api/{collection}/{id}/versions` lists retained snapshots. DELETE requires admin and is only exposed for writable resources. Model deletion is refused for some direct resource references; there is no complete dependency garbage collector.
+
+- **schedules:** `{name, agent, every_minutes (1–10080) | cron (5-field UTC), prompt?, enabled?}`. Worker ticks ~60 s; `POST /api/schedules/{id}/run` enqueues now.
+- **webhooks:** `{name, url|to, events, secret (≥16 chars), format (generic|slack|teams|email), max_retries (0–5), enabled?}`. Events include jobs, approvals, `document.ingested`, `connector.synced`, `guardrail.blocked`. HMAC header `X-Nuvora-Signature`; `POST /api/webhooks/{id}/test`. Secrets redacted on read.
+- **models** may set `max_retries` (0–3) and `failover_model` (same capability) for transient buffered-chat failures.
+- **policies** may set `min_citation_overlap` (0–1) to refuse `/api/answer` when lexical overlap is below the floor.
+- **jobs:** `POST /api/jobs/{id}/cancel` cancels a queued job only.
 
 Read-only collections: `documents`, `datasets`, `memory`, `jobs`, `approvals`. Document ingestion, dataset creation, job submission and approval decision endpoints are separate. Documents with `groups` are visible only to members of those groups and to administrators. Dataset list and get responses omit the record content. A dataset can be deleted unless a recipe references it.
+
+| Endpoint | Body | Behavior |
+|---|---|---|
+| GET `/api/bundles/export` | optional `?kinds=…` | Developer+: agents, prompts, policies, workflows, guardrails, routers, schedules, mcp_servers, connectors (no secrets) |
+| POST `/api/bundles/import` | bundle JSON, optional `dry_run` | Admin: create resources from a bundle; 200 for dry run, 201 when written |
+| POST `/api/estimate` | `text` or `messages` or `texts` | Characters/4 heuristic token count for budgeting |
+| GET `/api/audit/checkpoint` | — | Admin: chain verification plus optional HMAC tip signature (`NUVORA_SECRET_KEY`) |
+| GET `/api/evaluations/board` | — | Latest completed score and release verdict per evaluation suite |
 
 ## Inference and knowledge
 
@@ -51,8 +65,8 @@ Read-only collections: `documents`, `datasets`, `memory`, `jobs`, `approvals`. D
 | GET `/api/knowledge/{id}/ingestion-jobs/{jobId}` | — | One job. `status` is `STARTING` (queued), `IN_PROGRESS`, `COMPLETE` or `FAILED` (failed, or interrupted by a restart). `statistics`: `documents_scanned`, `documents_new`, `documents_modified`, `documents_unchanged`, `documents_deleted`, `documents_failed`. A job is `FAILED` when every document failed; otherwise per-document problems are in `failure_reasons` (at most 50) and the job is `COMPLETE` |
 | DELETE `/api/documents/{id}` | — | Developer/admin: removes the document and its chunks (audited) |
 | POST `/api/knowledge/{id}/ingest` | `name`, `text`, optional `source`, `chunk_size`, `overlap`, `metadata`, `groups` | New/replaced document, content digest |
-| POST `/api/retrieve` | `knowledge_ids`, `query`, optional `top_k`, `filter` | Retrieved citation records the caller may see. `filter` matches document metadata, every key must match: `{key: value}` or `{key: {in: [values]}}` (at most 10 keys) |
-| POST `/api/answer` | `knowledge_ids`, `question`, optional `model`, `top_k`, `filter` | Generation using supplied evidence, or refusal to invent absent evidence. Includes a `grounding` score when the policy sets a grounding threshold |
+| POST `/api/retrieve` | `knowledge_ids`, `query`, optional `top_k`, `filter`, `prefer_fresh` | Retrieved citation records the caller may see. `filter` matches document metadata, every key must match: `{key: value}` or `{key: {in: [values]}}` (at most 10 keys). `prefer_fresh` lightly boosts newer documents (`last_seen` / `updated`) |
+| POST `/api/answer` | `knowledge_ids`, `question`, optional `model`, `top_k`, `filter`, `prefer_fresh` | Generation using supplied evidence, or refusal to invent absent evidence. Includes a `grounding` score when the policy sets a grounding threshold, and `citation_overlap` (0–1 lexical overlap of the answer with the passages) |
 | POST `/api/guardrails` (also GET list/one, DELETE `/api/guardrails/{id}`) | `name`, optional `description`, `input` and `output` sections, `blocked_input_message`, `blocked_output_message`; edit by POSTing to `/api/guardrails/{id}` with `expected_revision` | Guardrail resource whose current content is the working copy, **DRAFT**. Administrator writes; any role reads. Each section takes `blocked_topics`, `word_filters`, `regex_filters`, `pii_entities` (`mask`/`block`), `detect_injection` (input only), `max_chars`, `grounding_threshold`, `classifier_model` + `classifier_categories` + `classifier_threshold` (the same semantics as the tenant policy), and `strengths`. Unlike the tenant policy, a missing `pii_entities` redacts nothing |
 | POST `/api/guardrails/{id}/versions` | optional `description` | Administrator: snapshots the DRAFT as the next immutable version (1, 2, …; at most 200). 201 with the snapshot |
 | GET `/api/guardrails/{id}/versions` · `/versions/{n}` · `/versions/DRAFT` | — | `{items}` of numbered versions, or one version / the DRAFT; 404 for an unknown number, 400 for a malformed one |

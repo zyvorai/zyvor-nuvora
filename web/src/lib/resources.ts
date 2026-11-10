@@ -3,22 +3,24 @@ import type { Row } from '../api';
 
 // Writable fields per collection; mirrors Platform.validate so duplicates pass validation.
 export const FIELDS: Record<string, string[]> = {
-  models: ['provider', 'upstream_model', 'base_url', 'key_env', 'region', 'capability', 'input_price', 'output_price', 'cached_input_price', 'image_price', 'enabled', 'vision'],
+  models: ['provider', 'upstream_model', 'base_url', 'key_env', 'region', 'capability', 'input_price', 'output_price', 'cached_input_price', 'image_price', 'enabled', 'vision', 'max_retries', 'failover_model'],
   routers: ['models', 'strategy', 'judge_model', 'min_score'],
   knowledge: ['embedding_model', 'rerank_model', 'ocr_model', 'transcription_model'],
   agents: ['model', 'knowledge_ids', 'tools', 'max_steps', 'system_prompt', 'summarize_memory'],
   mcp_servers: ['url', 'key_env', 'readonly', 'tools'],
   connectors: ['type', 'knowledge_id', 'url', 'depth', 'max_pages', 'bucket', 'prefix', 'region', 'space', 'username', 'key_env', 'metadata', 'groups', 'interval_minutes'],
   prompts: ['template', 'variants'],
-  policies: ['max_chars', 'daily_tokens', 'blocked_topics', 'redact_pii', 'detect_injection', 'word_filters', 'regex_filters', 'pii_entities', 'grounding_threshold', 'classifier_model', 'classifier_categories', 'classifier_threshold', 'cache_ttl'],
+  policies: ['max_chars', 'daily_tokens', 'blocked_topics', 'redact_pii', 'detect_injection', 'word_filters', 'regex_filters', 'pii_entities', 'grounding_threshold', 'classifier_model', 'classifier_categories', 'classifier_threshold', 'cache_ttl', 'min_citation_overlap'],
   workflows: ['steps'],
   evaluations: ['model', 'cases', 'pass_threshold', 'judge_model', 'knowledge_ids'],
   recipes: ['model', 'method', 'dataset', 'dataset_id', 'teacher_model', 'rank', 'epochs'],
   actions: ['url', 'method', 'key_env', 'description', 'input_schema'],
+  schedules: ['agent', 'every_minutes', 'cron', 'prompt', 'enabled'],
+  webhooks: ['url', 'to', 'events', 'secret', 'enabled', 'format', 'max_retries'],
 };
 
 export const DRAWER_KINDS = [...Object.keys(FIELDS), 'approvals'];
-export const ADMIN_KINDS = ['models', 'policies', 'actions', 'mcp_servers', 'connectors'];
+export const ADMIN_KINDS = ['models', 'policies', 'actions', 'mcp_servers', 'connectors', 'webhooks'];
 export const RUNNABLE: Record<string, { field: string; label: string; button: string; placeholder: string } | null> = {
   agents: { field: 'message', label: 'Task', button: 'Run agent', placeholder: 'Explain Keep' },
   workflows: { field: 'text', label: 'Workflow input', button: 'Start workflow', placeholder: 'Explain Keep isolation' },
@@ -45,6 +47,8 @@ export function singular(kind: string): string {
     routers: 'Router',
     mcp_servers: 'MCP server',
     connectors: 'connector',
+    schedules: 'Schedule',
+    webhooks: 'Webhook',
     approvals: 'Approval',
     jobs: 'Run',
   };

@@ -7,6 +7,7 @@ export const pages = [
   'knowledge',
   'connectors',
   'agents',
+  'schedules',
   'actions',
   'mcp_servers',
   'workflows',
@@ -16,6 +17,7 @@ export const pages = [
   'evaluations',
   'batches',
   'approvals',
+  'webhooks',
   'policies',
   'usage',
   'audit',
@@ -62,6 +64,7 @@ export const navGroups: NavGroup[] = [
     label: 'Build',
     children: [
       { page: 'agents', label: 'Agents', blurb: 'Bounded model and tool loops with registered tool schemas.' },
+      { page: 'schedules', label: 'Schedules', blurb: 'Run an agent on an interval without waiting for a click.' },
       { page: 'actions', label: 'API actions', blurb: 'Typed enterprise APIs; external writes wait for human approval.' },
       { page: 'mcp_servers', label: 'MCP servers', blurb: 'Remote tool servers for agents; writing tools wait for approval.' },
       { page: 'workflows', label: 'Workflows', blurb: 'Pinned DAGs with retrieval, generation and review steps.' },
@@ -81,6 +84,7 @@ export const navGroups: NavGroup[] = [
     label: 'Govern',
     children: [
       { page: 'approvals', label: 'Approvals', blurb: 'Exact-action decisions by a different person.' },
+      { page: 'webhooks', label: 'Webhooks', blurb: 'HMAC-signed outbound POSTs for jobs and approvals.' },
       { page: 'policies', label: 'Guardrails', blurb: 'Word, regex, PII, grounding and classifier checks on inputs and outputs.' },
       { page: 'usage', label: 'Usage & cost', blurb: 'Tokens, latency and estimated spend per model.' },
       { page: 'audit', label: 'Evidence', blurb: 'The hash-chained audit trail, verifiable and exportable.' },

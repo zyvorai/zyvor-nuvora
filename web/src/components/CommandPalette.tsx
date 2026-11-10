@@ -14,6 +14,7 @@ const RESOURCE_KINDS: [string, string][] = [
   ['routers', 'Router'],
   ['knowledge', 'Knowledge base'],
   ['agents', 'Agent'],
+  ['schedules', 'Schedule'],
   ['actions', 'Action'],
   ['mcp_servers', 'MCP server'],
   ['connectors', 'Connector'],
@@ -24,6 +25,7 @@ const RESOURCE_KINDS: [string, string][] = [
   ['recipes', 'Recipe'],
   ['jobs', 'Run'],
   ['approvals', 'Approval'],
+  ['webhooks', 'Webhook'],
 ];
 
 const resourceName = (kind: string, r: Row) =>

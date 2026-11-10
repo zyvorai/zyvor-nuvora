@@ -52,6 +52,7 @@ Give agents a closed set of tools: your OpenAPI actions, MCP servers and suite i
 
 - OpenAPI import and remote MCP servers, registered by an admin
 - Session and long-term memory, with writes behind approval
+- Interval schedules, HMAC webhooks and config bundle export/import
 - Workflow steps for retrieval, extraction, images and Zyntra handoff
 
 ![Workflow builder with retrieval, model and approval steps](docs/ux/15-workflow-builder.png)
@@ -206,10 +207,10 @@ SQLite on one node, PostgreSQL across replicas. Environment variables include `N
 |---|---|
 | Models | Catalog, explicit or price-based selection, cascade routers, OpenAI/Ollama adapters, optional AWS adapter, image models, trainer-backed LoRA/QLoRA/distillation |
 | Knowledge | File upload (txt/md/json/csv/html/docx, PDF via extra), OCR and audio transcription, web/S3/Confluence connectors, metadata filters, group ACLs, BM25 + lexical-vector fusion, OpenAI/Ollama embeddings, optional LLM rerank |
-| Agents | Bounded model/tool loop, registered tool schemas, OpenAPI-imported actions, MCP server tools, Netra evidence tools, Keep `run_code` behind approval, long-term memory, OTLP step traces |
+| Agents | Bounded model/tool loop, registered tool schemas, OpenAPI-imported actions, MCP server tools, optional web search, Netra evidence tools, Keep `run_code` behind approval, long-term memory, interval schedules, OTLP step traces |
 | Workflows | Ordered DAG validation, retrieve/generate/template/condition/extract/review/handoff/generate_image nodes, durable checkpoints, Zyntra handoff |
 | Prompts and evaluation | Version snapshots, weighted variants, experiments on evaluation suites; contains/excludes, LLM-judge and grounded cases with reasons and release verdicts |
-| Governance | OIDC SSO, tenant isolation, viewer/developer/approver/admin roles, scoped and revocable service tokens, separate-human approvals |
+| Governance | OIDC SSO, tenant isolation, viewer/developer/approver/admin roles, scoped and revocable service tokens, separate-human approvals, HMAC webhooks, config bundles |
 | Guardrails | Word and regex filters, PII masking or blocking (email, IBAN, card, SSN, IPv4, phone), grounding score, classifier model, size limits |
 | Inference operations | Guardrail-checked streaming in the console and on `/v1`, deterministic cache, batch jobs, token budgets, concurrency caps |
 | Evidence | Job traces, source digests, hash-chained audit with filters, CSV and JSON exports, offline chain verification |

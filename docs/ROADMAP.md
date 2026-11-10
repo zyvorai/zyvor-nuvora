@@ -12,13 +12,13 @@
 
 - SharePoint and Google Drive connectors; group sync from the identity provider.
 - OCR in isolated workers; video extraction.
-- Citation entailment and source freshness; live embedding-quality benchmarks.
+- Citation entailment (lexical overlap and freshness boosting shipped; entailment models remain); live embedding-quality benchmarks.
 - Retrieval scale benchmarks and vector-store backend adapters (pgvector first).
 
 ## Models and optimization
 
-- Explicit provider retry/failover policies with response-start safety.
-- Tokenizer-aware estimates and embedding usage/budget accounting.
+- Response-start-safe stream retries and multi-hop health-aware failover (buffered `max_retries` and single `failover_model` shipped).
+- Model-tokenizer estimates (characters/4 heuristic and embedding budget metering shipped).
 - Gryvia as a trainer, dataset lineage and evaluation-based promotion of trained models.
 - Latency-aware and learned routing using published evaluation results.
 - A batch inference API with provider batch discounts.
@@ -30,8 +30,8 @@
 - Tenant retention/delete/export policies and quotas for every API path.
 - Signed audit checkpoints and external immutable storage anchors.
 - Complete MCP protocol transport (streaming sessions) and A2A adapters.
-- Scheduled agents and Slack, Teams and email channels.
-- Evaluation dashboards across runs and releases.
+- Timezone-aware cron calendars and rich Slack/Teams apps (5-field UTC cron, Slack/Teams/email webhook shapes, and an evaluation release board shipped).
+- Deeper evaluation dashboards across releases and promotion gates (suite release board shipped).
 - Formal accessibility audit with assistive technology.
 
 All roadmap entries are absent unless the capability matrix explicitly marks them as implemented. Keep performance and compliance claims tied to independently reproducible evidence.

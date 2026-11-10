@@ -280,9 +280,16 @@ export default function Runs({
           </>
         }
         renderAction={(r) => (
-          <button type="button" className="link" onClick={() => setSelected(r.id)}>
-            Inspect <ArrowRight size={14} />
-          </button>
+          <span className="eval-action">
+            {r.status === 'queued' && (
+              <button type="button" className="btn-secondary compact" onClick={() => act(() => api('/api/jobs/' + r.id + '/cancel', {}), 'Run cancelled')}>
+                Cancel
+              </button>
+            )}
+            <button type="button" className="link" onClick={() => setSelected(r.id)}>
+              Inspect <ArrowRight size={14} />
+            </button>
+          </span>
         )}
       />
       {run && <Inspector run={run} approvals={approvals} principal={principal} canApprove={canApprove} act={act} />}
